@@ -4,7 +4,7 @@
 [![Vercel Deployment](https://img.shields.io/badge/Deploy-Vercel-black?logo=vercel&logoColor=white)](https://vercel.com)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-**Izlude** is a minimalist, ultra-lightweight, and high-performance API client (Postman alternative) styled in a sleek Notion monochrome aesthetic. Built with **Tauri, Rust, and React**, Izlude removes the heavy Electron bloat of traditional clients, compiling down to a ~5MB native binary that launches instantly and uses minimal RAM.
+**Izlude** is a minimalist, ultra-lightweight, and high-performance API client designed with a clean monochrome aesthetic. Built with **Tauri, Rust, and React**, Izlude removes the heavy Electron bloat of traditional clients, compiling down to a ~5MB native binary that launches instantly and uses minimal RAM.
 
 ---
 
@@ -14,8 +14,8 @@
 - **🛡️ CORS-Bypassing Requests**: Executes HTTP requests natively inside Rust, bypassing browser-enforced CORS restrictions automatically without requiring proxy servers.
 - **📝 CodeMirror 6 Editor**: Rich JSON editing featuring automatic brace auto-closing, bracket matching, code folding, auto-indentation, and real-time JSON syntax lint validation with red squiggly highlights.
 - **📂 Auto cURL Parsing**: Paste raw cURL commands directly into the main URL input bar. Izlude decomposes and populates the HTTP method, headers, parameters, and request body instantly.
-- **⚙️ Notion-Style Auto-complete (`{{`)**: Type `{{` in any field to open a floating auto-complete popover listing your active environment variables.
-- **🌓 Dynamic Light & Dark Themes**: Full Notion light/dark mode support. The code editor and panels automatically transition stylesheets dynamically with zero editor remounting.
+- **⚙️ Dynamic Variable Auto-complete (`{{`)**: Type `{{` in any field to open a floating auto-complete popover listing your active environment variables.
+- **🌓 Dynamic Light & Dark Themes**: Full light/dark mode support. The code editor and panels automatically transition stylesheets dynamically with zero editor remounting.
 - **🔍 Response Search & Folding**: Easily query keywords inside JSON response payloads with `⌘F` (or `Ctrl+F`), and collapse/expand complex JSON nodes using gutter arrow chevrons.
 - **📋 Calculated Headers Tracker**: A collapsible sub-grid showing implicit headers injected dynamically by Auth settings (e.g., Bearer tokens) or body types, facilitating precise request debugging.
 
@@ -79,7 +79,7 @@ Izlude uses GitHub Actions to automate release builds in the cloud:
 - **Frontend**: React, TypeScript, Vite
 - **Code Editor**: CodeMirror 6
 - **Desktop Core**: Tauri v2, Rust
-- **Styling**: Vanilla CSS (Notion Light/Dark Palette)
+- **Styling**: Vanilla CSS (Monochrome Light/Dark Palette)
 - **Icons**: Lucide React
 
 ---

@@ -540,7 +540,7 @@ export default function App() {
             lineHeight: '1.6',
             marginBottom: '32px'
           }}>
-            Ditch the memory-heavy Electron clients. Izlude compiles down to a native 5MB bundle, using native OS WebViews and a fast Rust backend to bypass browser CORS limitations natively. Styled cleanly in signature Notion monochrome.
+            Ditch the memory-heavy Electron clients. Izlude compiles down to a native 5MB bundle, using native OS WebViews and a fast Rust backend to bypass browser CORS limitations natively. Styled cleanly in a signature monochrome aesthetic.
           </p>
 
           {/* CTA Group */}
