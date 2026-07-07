@@ -1,10 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Sidebar } from './components/Sidebar';
 import { RequestBuilder } from './components/RequestBuilder';
 import { ResponsePanel } from './components/ResponsePanel';
 import { EnvironmentModal } from './components/EnvironmentModal';
-import { type Tab, type Collection, type HistoryItem, type Environment, type RequestState, DEFAULT_REQUEST_STATE, type ResponseState } from './types';
-import { Plus, X, Laptop, Terminal, Sparkles, Folder, Sun, Moon } from 'lucide-react';
+import { type Tab, type Collection, type HistoryItem, type Environment, type RequestState, DEFAULT_REQUEST_STATE, type ResponseState, type Method } from './types';
+import { Plus, X, Laptop, Terminal, Sparkles, Folder, Sun, Moon, Search, HelpCircle } from 'lucide-react';
 
 export default function App() {
   // App views: 'landing' (marketing page) or 'app' (main workspace)
@@ -29,6 +29,55 @@ export default function App() {
   const [selectedEnvId, setSelectedEnvId] = useState<string>('none');
   
   const [isEnvModalOpen, setIsEnvModalOpen] = useState(false);
+
+  // Keyboard overlays & Emoji Picker state
+  const [showCommandPalette, setShowCommandPalette] = useState(false);
+  const [showShortcutsModal, setShowShortcutsModal] = useState(false);
+  const [openEmojiTabId, setOpenEmojiTabId] = useState<string | null>(null);
+  const [emojiCoords, setEmojiCoords] = useState({ top: 0, left: 0 });
+
+  const activeTab = tabs.find(t => t.id === activeTabId);
+
+  // Method color helper (Feature 9)
+  const getMethodColor = (m: Method): string => {
+    switch (m) {
+      case 'GET': return '#2ea843';
+      case 'POST': return '#dfab01';
+      case 'PUT': return '#0b6e99';
+      case 'DELETE': return '#e03e3e';
+      case 'PATCH': return '#9b51e0';
+      default: return '#7a7a78';
+    }
+  };
+
+  // Keyboard Shortcuts listener (Feature 12)
+  useEffect(() => {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      const isInput = () => {
+        const active = document.activeElement;
+        if (!active) return false;
+        const tag = active.tagName.toLowerCase();
+        return tag === 'input' || tag === 'textarea' || active.classList.contains('cm-content');
+      };
+
+      if (e.key === '?' && !isInput()) {
+        e.preventDefault();
+        setShowShortcutsModal(prev => !prev);
+      }
+
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setShowCommandPalette(prev => !prev);
+      }
+
+      if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+        e.preventDefault();
+        handleSendRequest();
+      }
+    };
+    window.addEventListener('keydown', handleGlobalKeyDown);
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown);
+  }, [tabs, activeTabId, environments, selectedEnvId]);
 
   // Sync theme with HTML root class
   useEffect(() => {
@@ -107,10 +156,12 @@ export default function App() {
   };
 
   // Tab Actions
-  const handleCreateTab = (initialState?: RequestState, name?: string) => {
+  const handleCreateTab = (initialState?: RequestState, name?: string, emoji?: string, notes?: string) => {
     const newTab: Tab = {
       id: Math.random().toString(36).substring(2, 9),
       name: name || 'Untitled Request',
+      emoji: emoji || '📄',
+      notes: notes || '',
       requestState: initialState ? JSON.parse(JSON.stringify(initialState)) : JSON.parse(JSON.stringify(DEFAULT_REQUEST_STATE)),
       responseState: null,
       isLoading: false,
@@ -347,8 +398,17 @@ export default function App() {
     }
   };
 
-  const handleSelectRequest = (savedState: RequestState, name: string) => {
-    handleCreateTab(savedState, name);
+  const handleSelectRequest = (savedState: RequestState, name: string, emoji?: string, notes?: string) => {
+    handleCreateTab(savedState, name, emoji, notes);
+  };
+
+  const handleUpdateActiveTabNotes = (notes: string) => {
+    setTabs(prev => prev.map(t => t.id === activeTabId ? { ...t, notes, isDirty: true } : t));
+  };
+
+  const handleSelectEmoji = (id: string, emoji: string) => {
+    setTabs(prev => prev.map(t => t.id === id ? { ...t, emoji, isDirty: true } : t));
+    setOpenEmojiTabId(null);
   };
 
   const handleCreateCollection = (name: string) => {
@@ -441,42 +501,23 @@ export default function App() {
     }
   };
 
-  const activeTab = tabs.find(t => t.id === activeTabId);
-
   // LANDING PAGE RENDER
   if (currentView === 'landing') {
     return (
-      <div style={{
-        display: 'flex',
-        flexDirection: 'column',
-        minHeight: '100vh',
-        width: '100%',
-        backgroundColor: 'var(--bg-primary)',
-        color: 'var(--text-primary)',
-        overflowY: 'auto'
-      }}>
+      <div className="landing-container">
         {/* Landing Header */}
-        <header style={{
-          padding: '20px 40px',
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          borderBottom: '1px solid var(--border-color)',
-          maxWidth: '1100px',
-          width: '100%',
-          margin: '0 auto'
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <img src="/favicon.svg" style={{ width: '28px', height: '28px', borderRadius: '6px' }} alt="Izlude logo" />
-            <span style={{ fontWeight: '700', fontSize: '18px', letterSpacing: '-0.3px' }}>Izlude</span>
+        <header className="landing-header">
+          <div className="landing-logo-container">
+            <img src="/favicon.svg" className="landing-logo" alt="Izlude logo" />
+            <span className="landing-logo-text">Izlude</span>
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
             <button 
               onClick={handleToggleTheme}
+              className="outline"
               style={{
                 padding: '8px',
-                border: '1px solid var(--border-color)',
                 borderRadius: '4px'
               }}
             >
@@ -497,72 +538,37 @@ export default function App() {
         </header>
 
         {/* Hero Section */}
-        <main style={{
-          maxWidth: '1100px',
-          width: '100%',
-          margin: '0 auto',
-          padding: '60px 40px 100px 40px',
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          textAlign: 'center'
-        }}>
-          <span style={{
-            fontSize: '11px',
-            fontWeight: '600',
-            textTransform: 'uppercase',
-            letterSpacing: '1px',
-            color: 'var(--text-secondary)',
-            backgroundColor: 'var(--bg-secondary)',
-            padding: '4px 10px',
-            borderRadius: '4px',
-            marginBottom: '16px',
-            border: '1px solid var(--border-color)'
-          }}>
+        <main className="landing-hero">
+          <span className="landing-badge">
             v0.0.1 Beta Release
           </span>
 
-          <h1 style={{
-            fontSize: '44px',
-            fontWeight: '800',
-            letterSpacing: '-1.5px',
-            lineHeight: '1.15',
-            maxWidth: '750px',
-            marginBottom: '16px'
-          }}>
+          <h1 className="landing-title">
             The Native, Ultra-Lightweight API Client
           </h1>
 
-          <p style={{
-            fontSize: '16px',
-            color: 'var(--text-secondary)',
-            maxWidth: '650px',
-            lineHeight: '1.6',
-            marginBottom: '32px'
-          }}>
+          <p className="landing-desc">
             Ditch the memory-heavy Electron clients. Izlude compiles down to a native 5MB bundle, using native OS WebViews and a fast Rust backend to bypass browser CORS limitations natively. Styled cleanly in a signature monochrome aesthetic.
           </p>
 
           {/* CTA Group */}
-          <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', justifyContent: 'center', marginBottom: '48px' }}>
+          <div className="landing-cta-group">
             <button 
               onClick={() => setCurrentView('app')}
               className="primary"
-              style={{ padding: '12px 28px', fontSize: '15px', fontWeight: '500' }}
+              style={{ padding: '12px 28px', fontSize: '15px', fontWeight: '500', borderRadius: '6px' }}
             >
               Launch Web Client
             </button>
             <a 
               href="https://github.com/nanpipat/Izlude/releases/download/v0.0.1/Izlude_0.1.0_aarch64.dmg"
+              className="outline"
               style={{
                 textDecoration: 'none',
-                backgroundColor: 'var(--bg-secondary)',
-                color: 'var(--text-primary)',
-                border: '1px solid var(--border-color)',
                 padding: '12px 24px',
                 fontSize: '14px',
                 fontWeight: '500',
-                borderRadius: '4px',
+                borderRadius: '6px',
                 display: 'inline-flex',
                 alignItems: 'center',
                 gap: '8px'
@@ -572,15 +578,13 @@ export default function App() {
             </a>
             <a 
               href="https://github.com/nanpipat/Izlude/releases"
+              className="outline"
               style={{
                 textDecoration: 'none',
-                backgroundColor: 'var(--bg-secondary)',
-                color: 'var(--text-primary)',
-                border: '1px solid var(--border-color)',
                 padding: '12px 24px',
                 fontSize: '14px',
                 fontWeight: '500',
-                borderRadius: '4px',
+                borderRadius: '6px',
                 display: 'inline-flex',
                 alignItems: 'center',
                 gap: '8px'
@@ -591,127 +595,110 @@ export default function App() {
           </div>
 
           {/* Vector GUI App Mockup */}
-          <div style={{
-            width: '100%',
-            maxWidth: '850px',
-            border: '1px solid var(--border-color)',
-            borderRadius: '8px',
-            backgroundColor: '#ffffff',
-            boxShadow: '0 12px 32px rgba(15, 15, 15, 0.08)',
-            overflow: 'hidden',
-            marginBottom: '80px',
-            aspectRatio: '1.6'
-          }}>
+          <div className="landing-mockup-wrapper">
             <svg viewBox="0 0 800 500" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
               {/* Header block */}
-              <rect x="0" y="0" width="800" height="40" fill="#f7f7f5" />
+              <rect x="0" y="0" width="800" height="40" fill={theme === 'dark' ? '#202020' : '#f7f7f5'} />
               <circle cx="20" cy="20" r="5" fill="#ff5f56" />
               <circle cx="36" cy="20" r="5" fill="#ffbd2e" />
               <circle cx="52" cy="20" r="5" fill="#27c93f" />
-              <text x="400" y="25" fill="#7a7a78" font-family="monospace" font-size="12" text-anchor="middle">Izlude - API Client</text>
-              <line x1="0" y1="40" x2="800" y2="40" stroke="#e9e9e6" stroke-width="1" />
+              <text x="400" y="25" fill={theme === 'dark' ? '#909090' : '#7a7a78'} font-family="monospace" font-size="12" text-anchor="middle">Izlude - API Client</text>
+              <line x1="0" y1="40" x2="800" y2="40" stroke={theme === 'dark' ? '#303030' : '#e9e9e6'} stroke-width="1" />
 
               {/* Sidebar */}
-              <rect x="0" y="40" width="200" height="460" fill="#ffffff" />
-              <line x1="200" y1="40" x2="200" y2="500" stroke="#e9e9e6" stroke-width="1" />
+              <rect x="0" y="40" width="200" height="460" fill={theme === 'dark' ? '#191919' : '#ffffff'} />
+              <line x1="200" y1="40" x2="200" y2="500" stroke={theme === 'dark' ? '#303030' : '#e9e9e6'} stroke-width="1" />
               
               {/* Sidebar items */}
-              <rect x="15" y="60" width="170" height="24" rx="4" fill="#efefe9" />
-              <text x="25" y="76" font-family="sans-serif" font-weight="bold" font-size="12" fill="#37352f">collections</text>
-              <text x="35" y="112" font-family="sans-serif" font-size="12" fill="#37352f">📁 User Auth API</text>
-              <text x="35" y="138" font-family="sans-serif" font-size="12" fill="#37352f">📁 Payments Gateway</text>
+              <rect x="15" y="60" width="170" height="24" rx="4" fill={theme === 'dark' ? '#2d2d2d' : '#efefe9'} />
+              <text x="25" y="76" font-family="sans-serif" font-weight="bold" font-size="12" fill={theme === 'dark' ? '#ffffff' : '#37352f'}>collections</text>
+              <text x="35" y="112" font-family="sans-serif" font-size="12" fill={theme === 'dark' ? '#ffffff' : '#37352f'}>📁 User Auth API</text>
+              <text x="35" y="138" font-family="sans-serif" font-size="12" fill={theme === 'dark' ? '#ffffff' : '#37352f'}>📁 Payments Gateway</text>
               
-              <text x="25" y="180" font-family="sans-serif" font-weight="bold" font-size="11" fill="#7a7a78">HISTORY</text>
+              <text x="25" y="180" font-family="sans-serif" font-weight="bold" font-size="11" fill={theme === 'dark' ? '#909090' : '#7a7a78'}>HISTORY</text>
               <rect x="25" y="196" width="30" height="15" rx="3" fill="#2ea843" />
               <text x="40" y="207" font-family="sans-serif" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle">POST</text>
-              <text x="62" y="207" font-family="sans-serif" font-size="11" fill="#37352f">/api/v1/auth/login</text>
+              <text x="62" y="207" font-family="sans-serif" font-size="11" fill={theme === 'dark' ? '#ffffff' : '#37352f'}>/api/v1/auth/login</text>
 
               <rect x="25" y="222" width="30" height="15" rx="3" fill="#2ea843" />
               <text x="40" y="233" font-family="sans-serif" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle">GET</text>
-              <text x="62" y="233" font-family="sans-serif" font-size="11" fill="#37352f">/users/me</text>
+              <text x="62" y="233" font-family="sans-serif" font-size="11" fill={theme === 'dark' ? '#ffffff' : '#37352f'}>/users/me</text>
 
               {/* Main Client workspace */}
-              <rect x="200" y="40" width="600" height="460" fill="#ffffff" />
+              <rect x="200" y="40" width="600" height="460" fill={theme === 'dark' ? '#191919' : '#ffffff'} />
               
               {/* Method select / URL bar */}
-              <rect x="220" y="65" width="70" height="30" rx="4" fill="#f7f7f5" stroke="#e9e9e6" />
+              <rect x="220" y="65" width="70" height="30" rx="4" fill={theme === 'dark' ? '#202020' : '#f7f7f5'} stroke={theme === 'dark' ? '#303030' : '#e9e9e6'} />
               <text x="255" y="84" font-family="sans-serif" font-weight="bold" font-size="12" fill="#2ea843" text-anchor="middle">POST</text>
               
-              <rect x="298" y="65" width="410" height="30" rx="4" fill="#f7f7f5" stroke="#e9e9e6" />
-              <text x="312" y="84" font-family="monospace" font-size="12" fill="#37352f">https://api.izlude.dev/v1/auth/login</text>
+              <rect x="298" y="65" width="410" height="30" rx="4" fill={theme === 'dark' ? '#202020' : '#f7f7f5'} stroke={theme === 'dark' ? '#303030' : '#e9e9e6'} />
+              <text x="312" y="84" font-family="monospace" font-size="12" fill={theme === 'dark' ? '#ffffff' : '#37352f'}>https://api.izlude.dev/v1/auth/login</text>
               
-              <rect x="716" y="65" width="62" height="30" rx="4" fill="#37352f" />
-              <text x="747" y="84" font-family="sans-serif" font-size="12" font-weight="bold" fill="#ffffff" text-anchor="middle">Send</text>
+              <rect x="716" y="65" width="62" height="30" rx="4" fill={theme === 'dark' ? '#ffffff' : '#37352f'} />
+              <text x="747" y="84" font-family="sans-serif" font-size="12" font-weight="bold" fill={theme === 'dark' ? '#191919' : '#ffffff'} text-anchor="middle">Send</text>
 
               {/* Tabs list */}
-              <text x="220" y="130" font-family="sans-serif" font-weight="bold" font-size="12" fill="#37352f">Params</text>
-              <text x="280" y="130" font-family="sans-serif" font-size="12" fill="#7a7a78">Headers</text>
-              <text x="350" y="130" font-family="sans-serif" font-size="12" fill="#7a7a78">Body (JSON)</text>
-              <line x1="220" y1="138" x2="260" y2="138" stroke="#37352f" stroke-width="2" />
-              <line x1="220" y1="140" x2="780" y2="140" stroke="#e9e9e6" stroke-width="1" />
+              <text x="220" y="130" font-family="sans-serif" font-weight="bold" font-size="12" fill={theme === 'dark' ? '#ffffff' : '#37352f'}>Params</text>
+              <text x="280" y="130" font-family="sans-serif" font-size="12" fill={theme === 'dark' ? '#909090' : '#7a7a78'}>Headers</text>
+              <text x="350" y="130" font-family="sans-serif" font-size="12" fill={theme === 'dark' ? '#909090' : '#7a7a78'}>Body (JSON)</text>
+              <line x1="220" y1="138" x2="260" y2="138" stroke={theme === 'dark' ? '#ffffff' : '#37352f'} stroke-width="2" />
+              <line x1="220" y1="140" x2="780" y2="140" stroke={theme === 'dark' ? '#303030' : '#e9e9e6'} stroke-width="1" />
 
               {/* Grid block */}
-              <rect x="220" y="155" width="560" height="24" fill="#f7f7f5" />
-              <text x="230" y="171" font-family="sans-serif" font-size="11" font-weight="bold" fill="#7a7a78">Key</text>
-              <text x="400" y="171" font-family="sans-serif" font-size="11" font-weight="bold" fill="#7a7a78">Value</text>
-              <text x="580" y="171" font-family="sans-serif" font-size="11" font-weight="bold" fill="#7a7a78">Description</text>
+              <rect x="220" y="155" width="560" height="24" fill={theme === 'dark' ? '#202020' : '#f7f7f5'} />
+              <text x="230" y="171" font-family="sans-serif" font-size="11" font-weight="bold" fill={theme === 'dark' ? '#909090' : '#7a7a78'}>Key</text>
+              <text x="400" y="171" font-family="sans-serif" font-size="11" font-weight="bold" fill={theme === 'dark' ? '#909090' : '#7a7a78'}>Value</text>
+              <text x="580" y="171" font-family="sans-serif" font-size="11" font-weight="bold" fill={theme === 'dark' ? '#909090' : '#7a7a78'}>Description</text>
               
-              <line x1="220" y1="205" x2="780" y2="205" stroke="#e9e9e6" stroke-width="1" />
-              <text x="230" y="196" font-family="monospace" font-size="12" fill="#37352f">grant_type</text>
+              <line x1="220" y1="205" x2="780" y2="205" stroke={theme === 'dark' ? '#303030' : '#e9e9e6'} stroke-width="1" />
+              <text x="230" y="196" font-family="monospace" font-size="12" fill={theme === 'dark' ? '#ffffff' : '#37352f'}>grant_type</text>
               <text x="400" y="196" font-family="monospace" font-size="12" fill="#0f7b2c">"password"</text>
               
               {/* Response block divider */}
-              <line x1="200" y1="230" x2="800" y2="230" stroke="#e9e9e6" stroke-width="2" />
+              <line x1="200" y1="230" x2="800" y2="230" stroke={theme === 'dark' ? '#303030' : '#e9e9e6'} stroke-width="2" />
               
               {/* Response Panel */}
-              <rect x="200" y="232" width="600" height="268" fill="#f7f7f5" />
+              <rect x="200" y="232" width="600" height="268" fill={theme === 'dark' ? '#202020' : '#f7f7f5'} />
               
-              <text x="220" y="260" font-family="sans-serif" font-weight="bold" font-size="12" fill="#7a7a78">Response</text>
+              <text x="220" y="260" font-family="sans-serif" font-weight="bold" font-size="12" fill={theme === 'dark' ? '#909090' : '#7a7a78'}>Response</text>
               <rect x="715" y="248" width="62" height="18" rx="3" fill="#e2f5e6" />
               <text x="746" y="261" font-family="sans-serif" font-size="10" font-weight="bold" fill="#2ea843" text-anchor="middle">200 OK</text>
-              <line x1="200" y1="275" x2="800" y2="275" stroke="#e9e9e6" stroke-width="1" />
+              <line x1="200" y1="275" x2="800" y2="275" stroke={theme === 'dark' ? '#303030' : '#e9e9e6'} stroke-width="1" />
 
               {/* CodeMirror Mock Editor in Response Panel */}
-              <rect x="220" y="290" width="560" height="190" rx="4" fill="#ffffff" stroke="#e9e9e6" />
+              <rect x="220" y="290" width="560" height="190" rx="4" fill={theme === 'dark' ? '#191919' : '#ffffff'} stroke={theme === 'dark' ? '#303030' : '#e9e9e6'} />
               
               {/* Line numbers */}
-              <rect x="220" y="290" width="30" height="190" fill="#f7f7f5" />
-              <line x1="250" y1="290" x2="250" y2="480" stroke="#e9e9e6" stroke-width="1" />
-              <text x="238" y="312" font-family="monospace" font-size="11" fill="#7a7a78" text-anchor="end">1</text>
-              <text x="238" y="332" font-family="monospace" font-size="11" fill="#7a7a78" text-anchor="end">2</text>
-              <text x="238" y="352" font-family="monospace" font-size="11" fill="#7a7a78" text-anchor="end">3</text>
-              <text x="238" y="372" font-family="monospace" font-size="11" fill="#7a7a78" text-anchor="end">4</text>
+              <rect x="220" y="290" width="30" height="190" fill={theme === 'dark' ? '#202020' : '#f7f7f5'} />
+              <line x1="250" y1="290" x2="250" y2="480" stroke={theme === 'dark' ? '#303030' : '#e9e9e6'} stroke-width="1" />
+              <text x="238" y="312" font-family="monospace" font-size="11" fill={theme === 'dark' ? '#909090' : '#7a7a78'} text-anchor="end">1</text>
+              <text x="238" y="332" font-family="monospace" font-size="11" fill={theme === 'dark' ? '#909090' : '#7a7a78'} text-anchor="end">2</text>
+              <text x="238" y="352" font-family="monospace" font-size="11" fill={theme === 'dark' ? '#909090' : '#7a7a78'} text-anchor="end">3</text>
+              <text x="238" y="372" font-family="monospace" font-size="11" fill={theme === 'dark' ? '#909090' : '#7a7a78'} text-anchor="end">4</text>
               
               {/* Highlighted JSON content */}
-              <text x="262" y="312" font-family="monospace" font-size="12" fill="#37352f" font-weight="bold">{"{"}</text>
-              <text x="282" y="332" font-family="monospace" font-size="12" fill="#9a3b1a" font-weight="bold">"status"</text>
-              <text x="350" y="332" font-family="monospace" font-size="12" fill="#37352f">:</text>
-              <text x="362" y="332" font-family="monospace" font-size="12" fill="#0f7b2c">"success"</text>
-              <text x="430" y="332" font-family="monospace" font-size="12" fill="#37352f">,</text>
+              <text x="262" y="312" font-family="monospace" font-size="12" fill={theme === 'dark' ? '#ffffff' : '#37352f'} font-weight="bold">{"{"}</text>
+              <text x="282" y="332" font-family="monospace" font-size="12" fill="#e06c75" font-weight="bold">"status"</text>
+              <text x="350" y="332" font-family="monospace" font-size="12" fill={theme === 'dark' ? '#ffffff' : '#37352f'}>:</text>
+              <text x="362" y="332" font-family="monospace" font-size="12" fill="#98c379">"success"</text>
+              <text x="430" y="332" font-family="monospace" font-size="12" fill={theme === 'dark' ? '#ffffff' : '#37352f'}>,</text>
 
-              <text x="282" y="352" font-family="monospace" font-size="12" fill="#9a3b1a" font-weight="bold">"access_token"</text>
-              <text x="400" y="352" font-family="monospace" font-size="12" fill="#37352f">:</text>
-              <text x="412" y="352" font-family="monospace" font-size="12" fill="#0f7b2c">"eyJhbGciOiJIUzI1NiIsIn..."</text>
-              <text x="600" y="352" font-family="monospace" font-size="12" fill="#37352f">,</text>
+              <text x="282" y="352" font-family="monospace" font-size="12" fill="#e06c75" font-weight="bold">"access_token"</text>
+              <text x="400" y="352" font-family="monospace" font-size="12" fill={theme === 'dark' ? '#ffffff' : '#37352f'}>:</text>
+              <text x="412" y="352" font-family="monospace" font-size="12" fill="#98c379">"eyJhbGciOiJIUzI1NiIsIn..."</text>
+              <text x="600" y="352" font-family="monospace" font-size="12" fill={theme === 'dark' ? '#ffffff' : '#37352f'}>,</text>
 
-              <text x="282" y="372" font-family="monospace" font-size="12" fill="#9a3b1a" font-weight="bold">"expires_in"</text>
-              <text x="380" y="372" font-family="monospace" font-size="12" fill="#37352f">:</text>
-              <text x="392" y="372" font-family="monospace" font-size="12" fill="#0b6e99">3600</text>
+              <text x="282" y="372" font-family="monospace" font-size="12" fill="#e06c75" font-weight="bold">"expires_in"</text>
+              <text x="380" y="372" font-family="monospace" font-size="12" fill={theme === 'dark' ? '#ffffff' : '#37352f'}>:</text>
+              <text x="392" y="372" font-family="monospace" font-size="12" fill="#d19a66">3600</text>
               
-              <text x="262" y="392" font-family="monospace" font-size="12" fill="#37352f" font-weight="bold">{"}"}</text>
+              <text x="262" y="392" font-family="monospace" font-size="12" fill={theme === 'dark' ? '#ffffff' : '#37352f'} font-weight="bold">{"}"}</text>
             </svg>
           </div>
 
           {/* Key Value Grid Cards */}
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
-            gap: '24px',
-            width: '100%',
-            maxWidth: '900px',
-            textAlign: 'left'
-          }}>
-            <div style={{ padding: '24px', border: '1px solid var(--border-color)', borderRadius: '6px', backgroundColor: 'var(--bg-secondary)' }}>
+          <div className="landing-grid-features">
+            <div className="landing-feature-card">
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
                 <Sparkles size={16} style={{ color: 'var(--color-success)' }} />
                 <h3 style={{ fontSize: '15px', fontWeight: '700' }}>Direct CORS Bypassing</h3>
@@ -721,7 +708,7 @@ export default function App() {
               </p>
             </div>
 
-            <div style={{ padding: '24px', border: '1px solid var(--border-color)', borderRadius: '6px', backgroundColor: 'var(--bg-secondary)' }}>
+            <div className="landing-feature-card">
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
                 <Terminal size={16} style={{ color: 'var(--color-info)' }} />
                 <h3 style={{ fontSize: '15px', fontWeight: '700' }}>CodeMirror 6 Editor</h3>
@@ -731,7 +718,7 @@ export default function App() {
               </p>
             </div>
 
-            <div style={{ padding: '24px', border: '1px solid var(--border-color)', borderRadius: '6px', backgroundColor: 'var(--bg-secondary)' }}>
+            <div className="landing-feature-card">
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
                 <Folder size={16} style={{ color: 'var(--color-warning)' }} />
                 <h3 style={{ fontSize: '15px', fontWeight: '700' }}>Direct cURL Pastes</h3>
@@ -759,6 +746,117 @@ export default function App() {
   }
 
   // MAIN CLIENT VIEW
+  // Floating Command Palette subcomponent (Feature 2)
+  const CommandPalette = () => {
+    const [search, setSearch] = useState('');
+    const [selectedIndex, setSelectedIndex] = useState(0);
+    const inputRef = useRef<HTMLInputElement>(null);
+
+    useEffect(() => {
+      inputRef.current?.focus();
+    }, []);
+
+    const commandsList = [
+      { label: 'Set Method to GET', shortcut: 'G', action: () => { activeTab && handleUpdateActiveTabRequest({ ...activeTab.requestState, method: 'GET' }) } },
+      { label: 'Set Method to POST', shortcut: 'P', action: () => { activeTab && handleUpdateActiveTabRequest({ ...activeTab.requestState, method: 'POST' }) } },
+      { label: 'Set Method to PUT', shortcut: 'U', action: () => { activeTab && handleUpdateActiveTabRequest({ ...activeTab.requestState, method: 'PUT' }) } },
+      { label: 'Set Method to DELETE', shortcut: 'D', action: () => { activeTab && handleUpdateActiveTabRequest({ ...activeTab.requestState, method: 'DELETE' }) } },
+      { label: 'Set Method to PATCH', shortcut: 'H', action: () => { activeTab && handleUpdateActiveTabRequest({ ...activeTab.requestState, method: 'PATCH' }) } },
+      { label: 'Create New Tab', shortcut: '⌘T', action: () => handleCreateTab() },
+      { label: 'Save Active Request', shortcut: '⌘S', action: () => handleSaveToCollection() },
+      { label: 'Switch Light/Dark Theme', shortcut: 'T', action: () => handleToggleTheme() },
+      { label: 'Open Environment Settings', shortcut: 'Shift+⌘+E', action: () => setIsEnvModalOpen(true) },
+      { label: 'Clear Request History', shortcut: 'L', action: () => setHistory([]) },
+      { label: 'Back to Home Landing', shortcut: 'Esc', action: () => setCurrentView('landing') }
+    ];
+
+    const filtered = commandsList.filter(c => c.label.toLowerCase().includes(search.toLowerCase()));
+
+    const handleKeyDown = (e: React.KeyboardEvent) => {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setSelectedIndex(prev => (prev + 1) % filtered.length);
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setSelectedIndex(prev => (prev - 1 + filtered.length) % filtered.length);
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        if (filtered[selectedIndex]) {
+          filtered[selectedIndex].action();
+          setShowCommandPalette(false);
+        }
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        setShowCommandPalette(false);
+      }
+    };
+
+    return (
+      <div className="notion-command-palette-overlay" onClick={() => setShowCommandPalette(false)}>
+        <div className="notion-command-palette" onClick={e => e.stopPropagation()} onKeyDown={handleKeyDown}>
+          <div className="notion-command-palette-input-wrapper">
+            <Search size={16} style={{ color: 'var(--text-secondary)' }} />
+            <input 
+              ref={inputRef}
+              type="text" 
+              placeholder="Type a command or search..." 
+              value={search}
+              onChange={e => { setSearch(e.target.value); setSelectedIndex(0); }}
+              className="notion-command-palette-input"
+            />
+          </div>
+          <div className="notion-command-palette-list">
+            {filtered.length === 0 ? (
+              <div style={{ padding: '8px 12px', fontSize: '13px', color: 'var(--text-secondary)', fontStyle: 'italic' }}>
+                No commands found
+              </div>
+            ) : (
+              filtered.map((c, idx) => {
+                const isSel = idx === selectedIndex;
+                return (
+                  <div 
+                    key={c.label} 
+                    className={`notion-command-palette-item ${isSel ? 'selected' : ''}`}
+                    onClick={() => { c.action(); setShowCommandPalette(false); }}
+                    onMouseEnter={() => setSelectedIndex(idx)}
+                  >
+                    <span>{c.label}</span>
+                    <span className="notion-command-palette-shortcut">{c.shortcut}</span>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const handleUpdateCollectionEmoji = (colId: string, emoji: string) => {
+    setCollections(prev => prev.map(c => c.id === colId ? { ...c, emoji } : c));
+  };
+
+  const handleUpdateRequestEmoji = (colId: string, reqId: string, emoji: string) => {
+    setCollections(prev => prev.map(col => {
+      if (col.id === colId) {
+        return {
+          ...col,
+          requests: col.requests.map(r => r.id === reqId ? { ...r, emoji } : r)
+        };
+      }
+      return col;
+    }));
+  };
+
+  // Close emojis on any global clicks
+  useEffect(() => {
+    const handleOutsideClick = () => {
+      setOpenEmojiTabId(null);
+    };
+    document.addEventListener('click', handleOutsideClick);
+    return () => document.removeEventListener('click', handleOutsideClick);
+  }, []);
+
   return (
     <div style={{ display: 'flex', width: '100%', height: '100%', overflow: 'hidden' }}>
       {/* 1. Workspace Sidebar */}
@@ -779,10 +877,15 @@ export default function App() {
         theme={theme}
         onToggleTheme={handleToggleTheme}
         onBackToLanding={() => setCurrentView('landing')}
+        onUpdateCollectionEmoji={handleUpdateCollectionEmoji}
+        onUpdateRequestEmoji={handleUpdateRequestEmoji}
       />
 
       {/* 2. Main Work Panel */}
-      <div className="main-content">
+      <div 
+        className="main-content"
+        style={{ '--method-accent': activeTab ? getMethodColor(activeTab.requestState.method) : undefined } as React.CSSProperties}
+      >
         {/* Workspace Tab bar */}
         <div style={{
           display: 'flex',
@@ -807,28 +910,19 @@ export default function App() {
                     handleCloseTab(tab.id, e as any);
                   }
                 }}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  padding: '0 12px',
-                  height: '32px',
-                  borderRadius: '4px 4px 0 0',
-                  border: isActive ? '1px solid var(--border-color)' : '1px solid transparent',
-                  borderBottom: isActive ? '1px solid var(--bg-primary)' : '1px solid transparent',
-                  backgroundColor: isActive ? 'var(--bg-primary)' : 'transparent',
-                  cursor: 'pointer',
-                  fontSize: '13px',
-                  fontWeight: isActive ? '500' : '400',
-                  color: isActive ? 'var(--text-primary)' : 'var(--text-secondary)',
-                  marginTop: '8px',
-                  marginRight: '2px',
-                  minWidth: '100px',
-                  maxWidth: '180px',
-                  position: 'relative',
-                  zIndex: isActive ? 2 : 1
-                }}
+                className={`workspace-tab hover-row ${isActive ? 'active' : ''}`}
               >
+                <span 
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setOpenEmojiTabId(tab.id);
+                    setEmojiCoords({ top: e.clientY + 12, left: e.clientX - 60 });
+                  }} 
+                  style={{ cursor: 'pointer', fontSize: '13px', marginRight: '2px' }}
+                  title="Change Emoji"
+                >
+                  {tab.emoji || '📄'}
+                </span>
                 <span className={`method-badge ${tab.requestState.method.toLowerCase()}`} style={{ scale: '0.8', margin: '0 -4px' }}>
                   {tab.requestState.method}
                 </span>
@@ -846,12 +940,11 @@ export default function App() {
                   style={{
                     padding: '2px',
                     borderRadius: '50%',
-                    opacity: 0.7,
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center'
                   }}
-                  className="notion-icon-btn"
+                  className="hover-actions notion-icon-btn"
                 >
                   <X size={10} />
                 </button>
@@ -897,6 +990,8 @@ export default function App() {
               onSend={handleSendRequest}
               isLoading={activeTab.isLoading}
               activeVariables={environments.find(e => e.id === selectedEnvId)?.variables || []}
+              notes={activeTab.notes || ''}
+              onChangeNotes={handleUpdateActiveTabNotes}
             />
             <ResponsePanel
               response={activeTab.responseState}
@@ -918,6 +1013,65 @@ export default function App() {
         onClose={() => setIsEnvModalOpen(false)}
         onSaveEnvironments={setEnvironments}
       />
+
+      {/* 5. Custom Overlay modals (Features 2, 11, 12) */}
+      {showCommandPalette && <CommandPalette />}
+
+      {showShortcutsModal && (
+        <div className="notion-modal-overlay" onClick={() => setShowShortcutsModal(false)}>
+          <div className="notion-modal" style={{ width: '450px' }} onClick={e => e.stopPropagation()}>
+            <div className="notion-modal-header">
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <HelpCircle size={18} />
+                <h3 style={{ fontSize: '15px', fontWeight: '600' }}>Keyboard Shortcuts</h3>
+              </div>
+              <button onClick={() => setShowShortcutsModal(false)} style={{ fontSize: '18px' }}>×</button>
+            </div>
+            <div className="notion-modal-body" style={{ padding: '16px 20px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '13px' }}>
+                  <span style={{ color: 'var(--text-secondary)' }}>Send Request</span>
+                  <kbd className="notion-command-palette-shortcut">⌘ + Enter</kbd>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '13px' }}>
+                  <span style={{ color: 'var(--text-secondary)' }}>Open Command Palette</span>
+                  <kbd className="notion-command-palette-shortcut">⌘ + K</kbd>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '13px' }}>
+                  <span style={{ color: 'var(--text-secondary)' }}>Create New Tab</span>
+                  <kbd className="notion-command-palette-shortcut">⌘ + T</kbd>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '13px' }}>
+                  <span style={{ color: 'var(--text-secondary)' }}>Close Request Tab</span>
+                  <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Double Click Tab or Mid-Click</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '13px' }}>
+                  <span style={{ color: 'var(--text-secondary)' }}>Environments Manager</span>
+                  <kbd className="notion-command-palette-shortcut">Shift + ⌘ + E</kbd>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '13px' }}>
+                  <span style={{ color: 'var(--text-secondary)' }}>Toggle Shortcuts Menu</span>
+                  <kbd className="notion-command-palette-shortcut">?</kbd>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {openEmojiTabId && (
+        <div className="notion-emoji-popover" style={{ top: `${emojiCoords.top}px`, left: `${emojiCoords.left}px` }} onClick={e => e.stopPropagation()}>
+          {['🔑', '💳', '📦', '👤', '⚙️', '📁', '📄', '🌐', '🚀', '🧪', '🔍', '📈', '💬', '⚠️', '✅', '❌', '⏱️', '🛠️'].map(emoji => (
+            <div 
+              key={emoji} 
+              className="notion-emoji-btn" 
+              onClick={() => handleSelectEmoji(openEmojiTabId, emoji)}
+            >
+              {emoji}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

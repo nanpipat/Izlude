@@ -62,6 +62,8 @@ export interface ResponseState {
 export interface Tab {
   id: string;
   name: string;
+  emoji?: string;
+  notes?: string;
   requestState: RequestState;
   responseState: ResponseState | null;
   isLoading: boolean;
@@ -84,12 +86,15 @@ export interface Environment {
 export interface SavedRequest {
   id: string;
   name: string;
+  emoji?: string;
+  notes?: string;
   requestState: RequestState;
 }
 
 export interface Collection {
   id: string;
   name: string;
+  emoji?: string;
   requests: SavedRequest[];
 }
 

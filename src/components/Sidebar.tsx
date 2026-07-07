@@ -1,6 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
-  Folder, 
   History, 
   Plus, 
   Trash2, 
@@ -19,7 +18,7 @@ interface SidebarProps {
   selectedEnvId: string;
   onSelectEnvironment: (id: string) => void;
   onOpenEnvironmentModal: () => void;
-  onSelectRequest: (request: RequestState, name: string) => void;
+  onSelectRequest: (request: RequestState, name: string, emoji?: string, notes?: string) => void;
   onCreateCollection: (name: string) => void;
   onCreateRequestInCollection: (collectionId: string, name: string) => void;
   onDeleteCollection: (collectionId: string) => void;
@@ -29,6 +28,8 @@ interface SidebarProps {
   theme: 'light' | 'dark';
   onToggleTheme: () => void;
   onBackToLanding?: () => void;
+  onUpdateCollectionEmoji?: (colId: string, emoji: string) => void;
+  onUpdateRequestEmoji?: (colId: string, reqId: string, emoji: string) => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -47,12 +48,26 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onDeleteHistoryItem,
   theme,
   onToggleTheme,
-  onBackToLanding
+  onBackToLanding,
+  onUpdateCollectionEmoji,
+  onUpdateRequestEmoji
 }) => {
   const [expandedCollections, setExpandedCollections] = useState<Record<string, boolean>>({});
   const [newCollectionName, setNewCollectionName] = useState('');
   const [showAddCollectionInput, setShowAddCollectionInput] = useState(false);
   const [sidebarSearch, setSidebarSearch] = useState('');
+
+  // Emoji picker popup inside sidebar (Feature 11)
+  const [activeEmojiPicker, setActiveEmojiPicker] = useState<{ type: 'collection' | 'request'; colId: string; reqId?: string } | null>(null);
+  const [pickerCoords, setPickerCoords] = useState({ top: 0, left: 0 });
+
+  useEffect(() => {
+    const handleClosePickers = () => {
+      setActiveEmojiPicker(null);
+    };
+    document.addEventListener('click', handleClosePickers);
+    return () => document.removeEventListener('click', handleClosePickers);
+  }, []);
 
   const toggleCollection = (id: string) => {
     setExpandedCollections(prev => ({ ...prev, [id]: !prev[id] }));
@@ -211,15 +226,25 @@ export const Sidebar: React.FC<SidebarProps> = ({
                       padding: '4px 6px',
                       borderRadius: '4px',
                       cursor: 'pointer'
-                    }} className="sidebar-item" onClick={() => toggleCollection(col.id)}>
+                    }} className="sidebar-item hover-row" onClick={() => toggleCollection(col.id)}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 }}>
                         {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                        <Folder size={14} style={{ color: 'var(--text-secondary)' }} />
+                        <span 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setActiveEmojiPicker({ type: 'collection', colId: col.id });
+                            setPickerCoords({ top: e.clientY + 12, left: e.clientX });
+                          }}
+                          style={{ cursor: 'pointer', fontSize: '14px', marginRight: '2px' }}
+                          title="Change Emoji"
+                        >
+                          {col.emoji || '📁'}
+                        </span>
                         <span style={{ fontSize: '13px', fontWeight: '500', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           {col.name}
                         </span>
                       </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '2px' }} onClick={(e) => e.stopPropagation()}>
+                      <div className="hover-actions" style={{ display: 'flex', alignItems: 'center', gap: '2px' }} onClick={(e) => e.stopPropagation()}>
                         <button className="notion-icon-btn" onClick={() => handleCreateRequest(col.id)} title="Add Request">
                           <PlusCircle size={12} />
                         </button>
@@ -230,7 +255,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     </div>
 
                     {isExpanded && (
-                      <div style={{ paddingLeft: '20px', display: 'flex', flexDirection: 'column', borderLeft: '1px solid var(--border-color)', marginLeft: '12px', marginTop: '2px', marginBottom: '4px' }}>
+                      <div className="tree-guideline">
                         {col.requests.length === 0 ? (
                           <div style={{ padding: '4px 6px 4px 8px', fontSize: '11px', color: 'var(--text-secondary)', fontStyle: 'italic' }}>
                             Empty folder
@@ -245,8 +270,19 @@ export const Sidebar: React.FC<SidebarProps> = ({
                               borderRadius: '4px',
                               cursor: 'pointer',
                               marginBottom: '1px'
-                            }} className="sidebar-subitem" onClick={() => onSelectRequest(req.requestState, req.name)}>
+                            }} className="sidebar-subitem hover-row" onClick={() => onSelectRequest(req.requestState, req.name, req.emoji, req.notes)}>
                               <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 }}>
+                                <span 
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setActiveEmojiPicker({ type: 'request', colId: col.id, reqId: req.id });
+                                    setPickerCoords({ top: e.clientY + 12, left: e.clientX });
+                                  }}
+                                  style={{ cursor: 'pointer', fontSize: '13px', marginRight: '2px' }}
+                                  title="Change Emoji"
+                                >
+                                  {req.emoji || '📄'}
+                                </span>
                                 <span className={getMethodBadgeClass(req.requestState.method)} style={{ scale: '0.85', transformOrigin: 'left center' }}>
                                   {req.requestState.method}
                                 </span>
@@ -254,7 +290,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                                   {req.name}
                                 </span>
                               </div>
-                              <button className="notion-icon-btn" onClick={(e) => {
+                              <button className="hover-actions notion-icon-btn" onClick={(e) => {
                                 e.stopPropagation();
                                 onDeleteRequestInCollection(col.id, req.id);
                               }} title="Delete Request">
@@ -303,7 +339,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   borderRadius: '4px',
                   cursor: 'pointer',
                   marginBottom: '2px'
-                }} className="sidebar-subitem" onClick={() => onSelectRequest(item.requestState, item.url)}>
+                }} className="sidebar-subitem hover-row" onClick={() => onSelectRequest(item.requestState, item.url)}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 }}>
                     <span className={getMethodBadgeClass(item.method)} style={{ scale: '0.85', transformOrigin: 'left center' }}>
                       {item.method}
@@ -316,7 +352,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     <span style={{ fontSize: '10px', color: item.status >= 200 && item.status < 300 ? 'var(--color-success)' : 'var(--color-danger)' }}>
                       {item.status || 'ERR'}
                     </span>
-                    <button className="notion-icon-btn" onClick={(e) => {
+                    <button className="hover-actions notion-icon-btn" onClick={(e) => {
                       e.stopPropagation();
                       onDeleteHistoryItem(item.id);
                     }}>
@@ -361,6 +397,27 @@ export const Sidebar: React.FC<SidebarProps> = ({
           {theme === 'dark' ? '☀️ Light' : '🌙 Dark'}
         </button>
       </div>
+
+      {activeEmojiPicker && (
+        <div className="notion-emoji-popover" style={{ top: `${pickerCoords.top}px`, left: `${pickerCoords.left}px` }} onClick={e => e.stopPropagation()}>
+          {['🔑', '💳', '📦', '👤', '⚙️', '📁', '📄', '🌐', '🚀', '🧪', '🔍', '📈', '💬', '⚠️', '✅', '❌', '⏱️', '🛠️'].map(emoji => (
+            <div 
+              key={emoji} 
+              className="notion-emoji-btn" 
+              onClick={() => {
+                if (activeEmojiPicker.type === 'collection') {
+                  onUpdateCollectionEmoji?.(activeEmojiPicker.colId, emoji);
+                } else if (activeEmojiPicker.type === 'request' && activeEmojiPicker.reqId) {
+                  onUpdateRequestEmoji?.(activeEmojiPicker.colId, activeEmojiPicker.reqId, emoji);
+                }
+                setActiveEmojiPicker(null);
+              }}
+            >
+              {emoji}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 };

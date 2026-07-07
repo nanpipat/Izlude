@@ -12,6 +12,8 @@ interface RequestBuilderProps {
   onSend: () => void;
   isLoading: boolean;
   activeVariables: { key: string; value: string; enabled: boolean }[];
+  notes?: string;
+  onChangeNotes?: (notes: string) => void;
 }
 
 const COMMON_HEADERS = [
@@ -61,7 +63,9 @@ export const RequestBuilder: React.FC<RequestBuilderProps> = ({
   onChangeRequestState,
   onSend,
   isLoading,
-  activeVariables
+  activeVariables,
+  notes,
+  onChangeNotes
 }) => {
   const [activeTab, setActiveTab] = useState<'params' | 'headers' | 'body' | 'auth'>('params');
   const [showCurlModal, setShowCurlModal] = useState(false);
@@ -70,6 +74,7 @@ export const RequestBuilder: React.FC<RequestBuilderProps> = ({
   const [jsonError, setJsonError] = useState<string | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [showCalculatedHeaders, setShowCalculatedHeaders] = useState(false);
+  const [showNotes, setShowNotes] = useState(false);
 
   // Suggestions popover state
   const [suggestState, setSuggestState] = useState<{
@@ -108,6 +113,79 @@ export const RequestBuilder: React.FC<RequestBuilderProps> = ({
     });
   };
 
+  const syncParamsToUrl = (updatedParams: KeyValuePair[], currentUrl: string): string => {
+    try {
+      const baseUrl = currentUrl.split('?')[0] || '';
+      const activeParams = updatedParams.filter(p => p.enabled && p.key.trim());
+      if (activeParams.length === 0) return baseUrl;
+
+      const searchParams = new URLSearchParams();
+      activeParams.forEach(p => {
+        searchParams.append(p.key, p.value);
+      });
+      return `${baseUrl}?${searchParams.toString()}`;
+    } catch {
+      return currentUrl;
+    }
+  };
+
+  const updateFieldById = (fieldId: string, value: string) => {
+    if (fieldId === 'url') {
+      try {
+        const queryParams: KeyValuePair[] = [];
+        const questionMarkIndex = value.indexOf('?');
+        if (questionMarkIndex > -1) {
+          const queryString = value.slice(questionMarkIndex + 1);
+          const searchParams = new URLSearchParams(queryString);
+          searchParams.forEach((val, key) => {
+            queryParams.push({
+              id: Math.random().toString(36).substring(2, 9),
+              key,
+              value: val,
+              enabled: true
+            });
+          });
+          queryParams.push({
+            id: Math.random().toString(36).substring(2, 9),
+            key: '',
+            value: '',
+            enabled: true
+          });
+        }
+        onChangeRequestState({
+          ...requestState,
+          url: value,
+          params: queryParams.length > 0 ? queryParams : params
+        });
+      } catch {
+        onChangeRequestState({
+          ...requestState,
+          url: value
+        });
+      }
+    } else if (fieldId.startsWith('param-')) {
+      const parts = fieldId.split('-');
+      const keyOrValue = parts[1]; // 'key' or 'value'
+      const idx = parseInt(parts[2]);
+      updateList(params, idx, keyOrValue as any, value, 'params');
+    } else if (fieldId.startsWith('header-')) {
+      const parts = fieldId.split('-');
+      const keyOrValue = parts[1]; // 'key' or 'value'
+      const idx = parseInt(parts[2]);
+      updateList(headers, idx, keyOrValue as any, value, 'headers');
+    } else if (fieldId.startsWith('body-fd-')) {
+      const parts = fieldId.split('-');
+      const idx = parseInt(parts[2]);
+      const keyOrValue = parts[3];
+      updateList(body.formData, idx, keyOrValue as any, value, 'formData');
+    } else if (fieldId.startsWith('body-ue-')) {
+      const parts = fieldId.split('-');
+      const idx = parseInt(parts[2]);
+      const keyOrValue = parts[3];
+      updateList(body.urlencoded, idx, keyOrValue as any, value, 'urlencoded');
+    }
+  };
+
   const handleUrlChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
     
@@ -122,11 +200,7 @@ export const RequestBuilder: React.FC<RequestBuilderProps> = ({
       }
     }
 
-    onChangeRequestState({
-      ...requestState,
-      url: val
-    });
-
+    updateFieldById('url', val);
     handleInputAutocomplete(e.target, 'url', val);
   };
 
@@ -136,9 +210,25 @@ export const RequestBuilder: React.FC<RequestBuilderProps> = ({
     value: string
   ) => {
     activeInputRef.current = input;
-    const cursorPos = input.selectionStart || 0;
-    const textBeforeCursor = value.slice(0, cursorPos);
-    
+    let cursorPos = input.selectionStart || 0;
+    let textBeforeCursor = value.slice(0, cursorPos);
+
+    // Auto-close braces (Feature 1)
+    if (textBeforeCursor.endsWith('{{')) {
+      const textAfterCursor = value.slice(cursorPos);
+      if (!textAfterCursor.startsWith('}}')) {
+        const newValue = value.slice(0, cursorPos) + '}}' + textAfterCursor;
+        updateFieldById(fieldId, newValue);
+        setTimeout(() => {
+          if (input) {
+            input.focus();
+            input.setSelectionRange(cursorPos, cursorPos);
+          }
+        }, 0);
+        value = newValue;
+      }
+    }
+
     const lastOpenBrace = textBeforeCursor.lastIndexOf('{{');
     const lastCloseBrace = textBeforeCursor.lastIndexOf('}}');
     
@@ -238,25 +328,7 @@ export const RequestBuilder: React.FC<RequestBuilderProps> = ({
     }
 
     const fieldId = suggestState.fieldId;
-    if (fieldId === 'url') {
-      onChangeRequestState({ ...requestState, url: newValue });
-    } else if (fieldId.startsWith('param-')) {
-      const [,, index, keyOrValue] = fieldId.split('-');
-      const idx = parseInt(index);
-      updateList(params, idx, keyOrValue as any, newValue, 'params');
-    } else if (fieldId.startsWith('header-')) {
-      const [,, index, keyOrValue] = fieldId.split('-');
-      const idx = parseInt(index);
-      updateList(headers, idx, keyOrValue as any, newValue, 'headers');
-    } else if (fieldId.startsWith('body-fd-')) {
-      const [,,, index, keyOrValue] = fieldId.split('-');
-      const idx = parseInt(index);
-      updateList(body.formData, idx, keyOrValue as any, newValue, 'formData');
-    } else if (fieldId.startsWith('body-ue-')) {
-      const [,,, index, keyOrValue] = fieldId.split('-');
-      const idx = parseInt(index);
-      updateList(body.urlencoded, idx, keyOrValue as any, newValue, 'urlencoded');
-    }
+    updateFieldById(fieldId, newValue);
 
     setSuggestState(prev => ({ ...prev, visible: false }));
 
@@ -269,6 +341,28 @@ export const RequestBuilder: React.FC<RequestBuilderProps> = ({
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    // Auto-close braces (Feature 1)
+    if (e.key === '{') {
+      const input = e.currentTarget;
+      const start = input.selectionStart || 0;
+      const val = input.value;
+      const before = val.slice(0, start);
+      if (before.endsWith('{')) {
+        e.preventDefault();
+        const newVal = val.slice(0, start) + '{}}' + val.slice(start);
+        const fieldId = input.getAttribute('data-field') || '';
+        
+        updateFieldById(fieldId, newVal);
+        
+        setTimeout(() => {
+          input.focus();
+          input.setSelectionRange(start + 1, start + 1);
+          handleInputAutocomplete(input, fieldId, newVal);
+        }, 0);
+        return;
+      }
+    }
+
     if (!suggestState.visible) return;
 
     if (e.key === 'ArrowDown') {
@@ -300,7 +394,6 @@ export const RequestBuilder: React.FC<RequestBuilderProps> = ({
     return () => document.removeEventListener('click', handleOutsideClick);
   }, []);
 
-  // Update lists with auto-activation key checks
   const updateList = (
     list: KeyValuePair[], 
     index: number, 
@@ -314,7 +407,6 @@ export const RequestBuilder: React.FC<RequestBuilderProps> = ({
       [field]: value
     };
 
-    // Auto-enable row if user starts typing in a key or value
     if (field === 'key' || field === 'value') {
       if (value.trim()) {
         newList[index].enabled = true;
@@ -333,7 +425,12 @@ export const RequestBuilder: React.FC<RequestBuilderProps> = ({
     }
 
     if (listName === 'params') {
-      onChangeRequestState({ ...requestState, params: newList });
+      const newUrl = syncParamsToUrl(newList, url);
+      onChangeRequestState({ 
+        ...requestState, 
+        url: newUrl, 
+        params: newList 
+      });
     } else if (listName === 'headers') {
       onChangeRequestState({ ...requestState, headers: newList });
     } else if (listName === 'formData') {
@@ -367,7 +464,12 @@ export const RequestBuilder: React.FC<RequestBuilderProps> = ({
     }
 
     if (listName === 'params') {
-      onChangeRequestState({ ...requestState, params: newList });
+      const newUrl = syncParamsToUrl(newList, url);
+      onChangeRequestState({ 
+        ...requestState, 
+        url: newUrl, 
+        params: newList 
+      });
     } else if (listName === 'headers') {
       onChangeRequestState({ ...requestState, headers: newList });
     } else if (listName === 'formData') {
@@ -536,6 +638,48 @@ export const RequestBuilder: React.FC<RequestBuilderProps> = ({
     }
   };
 
+  const renderResolvedVariables = () => {
+    const variableRegex = /{{\s*(.*?)\s*}}/g;
+    const foundKeys = new Set<string>();
+    
+    let match;
+    while ((match = variableRegex.exec(url)) !== null) {
+      if (match[1]) foundKeys.add(match[1].trim());
+    }
+    headers.forEach(h => {
+      let m;
+      while ((m = variableRegex.exec(h.key)) !== null) { if (m[1]) foundKeys.add(m[1].trim()); }
+      while ((m = variableRegex.exec(h.value)) !== null) { if (m[1]) foundKeys.add(m[1].trim()); }
+    });
+    params.forEach(p => {
+      let m;
+      while ((m = variableRegex.exec(p.key)) !== null) { if (m[1]) foundKeys.add(m[1].trim()); }
+      while ((m = variableRegex.exec(p.value)) !== null) { if (m[1]) foundKeys.add(m[1].trim()); }
+    });
+    
+    if (foundKeys.size === 0) return null;
+
+    return (
+      <div className="resolved-vars-bar">
+        <span style={{ color: 'var(--text-secondary)', marginRight: '4px', fontWeight: '500' }}>Resolved variables:</span>
+        {Array.from(foundKeys).map(key => {
+          const variable = activeVariables.find(v => v.key === key && v.enabled);
+          const exists = !!variable;
+          const resolvedValue = exists ? variable.value : 'Undefined';
+          return (
+            <span 
+              key={key} 
+              className={`resolved-var-badge ${exists ? 'success' : 'danger'}`}
+              title={`${key} ➔ ${resolvedValue}`}
+            >
+              {key}: {resolvedValue.length > 20 ? resolvedValue.slice(0, 20) + '...' : resolvedValue}
+            </span>
+          );
+        })}
+      </div>
+    );
+  };
+
   const handleCopyCurl = () => {
     const curl = generateCurl(requestState);
     navigator.clipboard.writeText(curl);
@@ -570,53 +714,51 @@ export const RequestBuilder: React.FC<RequestBuilderProps> = ({
       )}
 
       {/* Top URL input row */}
-      <div style={{ display: 'flex', gap: '8px' }}>
-        <select 
-          value={method} 
-          onChange={handleMethodChange}
-          style={{
-            fontWeight: '600',
-            fontSize: '14px',
-            backgroundColor: 'var(--bg-secondary)',
-            border: '1px solid var(--border-color)',
-            cursor: 'pointer',
-            padding: '8px 12px',
-            borderRadius: '4px'
-          }}
-        >
-          <option value="GET">GET</option>
-          <option value="POST">POST</option>
-          <option value="PUT">PUT</option>
-          <option value="DELETE">DELETE</option>
-          <option value="PATCH">PATCH</option>
-          <option value="HEAD">HEAD</option>
-          <option value="OPTIONS">OPTIONS</option>
-        </select>
-        
-        <input 
-          type="text" 
-          placeholder="Enter request URL or paste cURL command..." 
-          value={url}
-          onChange={handleUrlChange}
-          onKeyDown={handleKeyDown}
-          style={{
-            flex: 1,
-            padding: '8px 12px',
-            fontSize: '14px',
-            borderRadius: '4px',
-            backgroundColor: 'var(--bg-secondary)',
-            border: '1px solid var(--border-color)'
-          }}
-        />
+      <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+        <div className="address-bar-container accented" style={{ flex: 1 }}>
+          <select 
+            value={method} 
+            onChange={handleMethodChange}
+            style={{
+              color: method === 'GET' ? 'var(--method-get)' : 
+                     method === 'POST' ? 'var(--method-post)' : 
+                     method === 'PUT' ? 'var(--method-put)' : 
+                     method === 'DELETE' ? 'var(--method-delete)' : 
+                     method === 'PATCH' ? 'var(--method-patch)' : 'var(--text-primary)'
+            }}
+          >
+            <option value="GET" style={{ color: 'var(--method-get)' }}>GET</option>
+            <option value="POST" style={{ color: 'var(--method-post)' }}>POST</option>
+            <option value="PUT" style={{ color: 'var(--method-put)' }}>PUT</option>
+            <option value="DELETE" style={{ color: 'var(--method-delete)' }}>DELETE</option>
+            <option value="PATCH" style={{ color: 'var(--method-patch)' }}>PATCH</option>
+            <option value="HEAD" style={{ color: 'var(--text-primary)' }}>HEAD</option>
+            <option value="OPTIONS" style={{ color: 'var(--text-primary)' }}>OPTIONS</option>
+          </select>
+          
+          <div className="address-bar-divider"></div>
+          
+          <input 
+            type="text" 
+            placeholder="Enter request URL or paste cURL command..." 
+            value={url}
+            onChange={handleUrlChange}
+            onKeyDown={handleKeyDown}
+            className="address-bar-input"
+            data-field="url"
+          />
+        </div>
 
         <button 
           onClick={onSend} 
           disabled={isLoading}
-          className="primary"
+          className="primary accented"
           style={{
             padding: '8px 24px',
             fontWeight: '500',
-            minWidth: '90px'
+            minWidth: '90px',
+            height: '38px',
+            borderRadius: '6px'
           }}
         >
           {isLoading ? 'Sending...' : 'Send'}
@@ -624,10 +766,12 @@ export const RequestBuilder: React.FC<RequestBuilderProps> = ({
 
         <button 
           onClick={() => setShowCurlModal(true)} 
+          className="outline"
           style={{
-            border: '1px solid var(--border-color)',
             fontSize: '13px',
-            padding: '8px 12px'
+            padding: '8px 14px',
+            height: '38px',
+            borderRadius: '6px'
           }}
         >
           Import cURL
@@ -636,15 +780,59 @@ export const RequestBuilder: React.FC<RequestBuilderProps> = ({
         <button 
           onClick={handleCopyCurl} 
           title="Copy as cURL"
+          className="outline"
           style={{
-            border: '1px solid var(--border-color)',
             padding: '8px',
-            aspectRatio: '1'
+            height: '38px',
+            width: '38px',
+            borderRadius: '6px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center'
           }}
         >
           {copiedCurl ? <Check size={16} style={{ color: 'var(--color-success)' }} /> : <Copy size={16} />}
         </button>
       </div>
+
+      {/* Variables Peek Bar (Feature 8) */}
+      {renderResolvedVariables()}
+
+      {/* Description Notes Card (Feature 7) */}
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '-8px', marginBottom: '-4px' }}>
+        <button 
+          onClick={() => setShowNotes(!showNotes)} 
+          style={{ fontSize: '11px', color: 'var(--text-secondary)', padding: '2px 4px', border: 'none', backgroundColor: 'transparent', cursor: 'pointer' }}
+        >
+          {showNotes ? 'Hide Description Notes' : 'Show Description Notes'}
+        </button>
+      </div>
+
+      {showNotes && (
+        <div className="notion-callout info" style={{ marginTop: '0px', marginBottom: '8px' }}>
+          <div className="notion-callout-icon">📝</div>
+          <div className="notion-callout-content" style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            <span style={{ fontWeight: '600', fontSize: '12.5px', color: 'var(--text-primary)' }}>Description Notes</span>
+            <textarea
+              value={notes || ''}
+              onChange={e => onChangeNotes?.(e.target.value)}
+              placeholder="Write Markdown notes here... (e.g. details of parameters, server behavior, scopes required)"
+              style={{
+                width: '100%',
+                height: '65px',
+                fontSize: '12px',
+                fontFamily: 'inherit',
+                border: 'none',
+                backgroundColor: 'transparent',
+                padding: 0,
+                resize: 'none',
+                color: 'var(--text-primary)',
+                outline: 'none'
+              }}
+            />
+          </div>
+        </div>
+      )}
 
       {/* Sub tabs container */}
       <div>
@@ -689,7 +877,7 @@ export const RequestBuilder: React.FC<RequestBuilderProps> = ({
                 </thead>
                 <tbody>
                   {safeParams.map((param, index) => (
-                    <tr key={param.id} style={{ opacity: param.enabled ? 1 : 0.5, transition: 'opacity 0.15s ease' }}>
+                    <tr key={param.id} className="hover-row" style={{ opacity: param.enabled ? 1 : 0.5, transition: 'opacity 0.15s ease' }}>
                       <td style={{ textAlign: 'center' }}>
                         <input 
                           type="checkbox" 
@@ -730,7 +918,7 @@ export const RequestBuilder: React.FC<RequestBuilderProps> = ({
                         />
                       </td>
                       <td>
-                        <button className="notion-icon-btn" onClick={() => removeRow(params, index, 'params')}>
+                        <button className="hover-actions notion-icon-btn" onClick={() => removeRow(params, index, 'params')}>
                           <Trash2 size={13} />
                         </button>
                       </td>
@@ -763,7 +951,7 @@ export const RequestBuilder: React.FC<RequestBuilderProps> = ({
                   </thead>
                   <tbody>
                     {safeHeaders.map((header, index) => (
-                      <tr key={header.id} style={{ opacity: header.enabled ? 1 : 0.5, transition: 'opacity 0.15s ease' }}>
+                      <tr key={header.id} className="hover-row" style={{ opacity: header.enabled ? 1 : 0.5, transition: 'opacity 0.15s ease' }}>
                         <td style={{ textAlign: 'center' }}>
                           <input 
                             type="checkbox" 
@@ -804,7 +992,7 @@ export const RequestBuilder: React.FC<RequestBuilderProps> = ({
                           />
                         </td>
                         <td>
-                          <button className="notion-icon-btn" onClick={() => removeRow(headers, index, 'headers')}>
+                          <button className="hover-actions notion-icon-btn" onClick={() => removeRow(headers, index, 'headers')}>
                             <Trash2 size={13} />
                           </button>
                         </td>
@@ -901,6 +1089,36 @@ export const RequestBuilder: React.FC<RequestBuilderProps> = ({
                     Beautify JSON
                   </button>
                 )}
+
+                {body.type === 'raw' && body.rawType === 'json' && (
+                  <select 
+                    value=""
+                    onChange={(e) => {
+                      if (e.target.value) {
+                        onChangeRequestState({
+                          ...requestState,
+                          body: { ...body, rawContent: e.target.value }
+                        });
+                        e.target.value = "";
+                      }
+                    }}
+                    style={{
+                      fontSize: '11px',
+                      border: '1px solid var(--border-color)',
+                      padding: '3px 8px',
+                      height: '23px',
+                      color: 'var(--text-secondary)',
+                      backgroundColor: 'var(--bg-primary)',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    <option value="">Insert Snippet...</option>
+                    <option value='{\n  "username": "admin",\n  "password": "password"\n}'>Login Credentials</option>
+                    <option value='{\n  "token_type": "Bearer",\n  "access_token": "mock_token_here",\n  "expires_in": 3600\n}'>Bearer Token Response</option>
+                    <option value='{\n  "page": 1,\n  "limit": 10,\n  "sortBy": "createdAt",\n  "order": "desc"\n}'>Pagination Query</option>
+                    <option value='{\n  "email": "user@example.com",\n  "firstName": "John",\n  "lastName": "Doe"\n}'>User Profile Payload</option>
+                  </select>
+                )}
               </div>
 
               {jsonError && (
@@ -962,7 +1180,7 @@ export const RequestBuilder: React.FC<RequestBuilderProps> = ({
                     </thead>
                     <tbody>
                       {safeFormData.map((item, index) => (
-                        <tr key={item.id} style={{ opacity: item.enabled ? 1 : 0.5, transition: 'opacity 0.15s ease' }}>
+                        <tr key={item.id} className="hover-row" style={{ opacity: item.enabled ? 1 : 0.5, transition: 'opacity 0.15s ease' }}>
                           <td style={{ textAlign: 'center' }}>
                             <input 
                               type="checkbox" 
@@ -1003,7 +1221,7 @@ export const RequestBuilder: React.FC<RequestBuilderProps> = ({
                             />
                           </td>
                           <td>
-                            <button className="notion-icon-btn" onClick={() => removeRow(body.formData, index, 'formData')}>
+                            <button className="hover-actions notion-icon-btn" onClick={() => removeRow(body.formData, index, 'formData')}>
                               <Trash2 size={13} />
                             </button>
                           </td>
@@ -1034,7 +1252,7 @@ export const RequestBuilder: React.FC<RequestBuilderProps> = ({
                     </thead>
                     <tbody>
                       {safeUrlencoded.map((item, index) => (
-                        <tr key={item.id} style={{ opacity: item.enabled ? 1 : 0.5, transition: 'opacity 0.15s ease' }}>
+                        <tr key={item.id} className="hover-row" style={{ opacity: item.enabled ? 1 : 0.5, transition: 'opacity 0.15s ease' }}>
                           <td style={{ textAlign: 'center' }}>
                             <input 
                               type="checkbox" 
@@ -1075,7 +1293,7 @@ export const RequestBuilder: React.FC<RequestBuilderProps> = ({
                             />
                           </td>
                           <td>
-                            <button className="notion-icon-btn" onClick={() => removeRow(body.urlencoded, index, 'urlencoded')}>
+                            <button className="hover-actions notion-icon-btn" onClick={() => removeRow(body.urlencoded, index, 'urlencoded')}>
                               <Trash2 size={13} />
                             </button>
                           </td>
@@ -1225,7 +1443,7 @@ export const RequestBuilder: React.FC<RequestBuilderProps> = ({
             position: 'absolute',
             top: `${suggestState.coords.top}px`,
             left: `${suggestState.coords.left}px`,
-            backgroundColor: '#ffffff',
+            backgroundColor: 'var(--bg-primary)',
             border: '1px solid var(--border-color)',
             borderRadius: '4px',
             boxShadow: '0 8px 16px rgba(15, 15, 15, 0.1)',

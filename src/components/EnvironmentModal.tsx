@@ -159,13 +159,13 @@ export const EnvironmentModal: React.FC<EnvironmentModalProps> = ({
                     backgroundColor: selectedEnvIndex === index ? 'var(--bg-active)' : 'transparent',
                     fontWeight: selectedEnvIndex === index ? '500' : '400'
                   }}
-                  className="sidebar-item"
+                  className="sidebar-item hover-row"
                 >
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 }}>
                     <Globe size={14} style={{ color: 'var(--text-secondary)' }} />
                     <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{env.name}</span>
                   </div>
-                  <button className="notion-icon-btn" onClick={(e) => { e.stopPropagation(); handleDeleteEnv(index); }}>
+                  <button className="hover-actions notion-icon-btn" onClick={(e) => { e.stopPropagation(); handleDeleteEnv(index); }}>
                     <Trash2 size={12} />
                   </button>
                 </div>
@@ -218,7 +218,7 @@ export const EnvironmentModal: React.FC<EnvironmentModalProps> = ({
                     </thead>
                     <tbody>
                       {currentEnv.variables.map((v, index) => (
-                        <tr key={v.id}>
+                        <tr key={v.id} className="hover-row">
                           <td style={{ textAlign: 'center' }}>
                             <input 
                               type="checkbox" 
@@ -243,7 +243,7 @@ export const EnvironmentModal: React.FC<EnvironmentModalProps> = ({
                             />
                           </td>
                           <td>
-                            <button className="notion-icon-btn" onClick={() => removeVariable(index)}>
+                            <button className="hover-actions notion-icon-btn" onClick={() => removeVariable(index)}>
                               <Trash2 size={12} />
                             </button>
                           </td>
