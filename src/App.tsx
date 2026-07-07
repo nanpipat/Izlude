@@ -746,91 +746,6 @@ export default function App() {
   }
 
   // MAIN CLIENT VIEW
-  // Floating Command Palette subcomponent (Feature 2)
-  const CommandPalette = () => {
-    const [search, setSearch] = useState('');
-    const [selectedIndex, setSelectedIndex] = useState(0);
-    const inputRef = useRef<HTMLInputElement>(null);
-
-    useEffect(() => {
-      inputRef.current?.focus();
-    }, []);
-
-    const commandsList = [
-      { label: 'Set Method to GET', shortcut: 'G', action: () => { activeTab && handleUpdateActiveTabRequest({ ...activeTab.requestState, method: 'GET' }) } },
-      { label: 'Set Method to POST', shortcut: 'P', action: () => { activeTab && handleUpdateActiveTabRequest({ ...activeTab.requestState, method: 'POST' }) } },
-      { label: 'Set Method to PUT', shortcut: 'U', action: () => { activeTab && handleUpdateActiveTabRequest({ ...activeTab.requestState, method: 'PUT' }) } },
-      { label: 'Set Method to DELETE', shortcut: 'D', action: () => { activeTab && handleUpdateActiveTabRequest({ ...activeTab.requestState, method: 'DELETE' }) } },
-      { label: 'Set Method to PATCH', shortcut: 'H', action: () => { activeTab && handleUpdateActiveTabRequest({ ...activeTab.requestState, method: 'PATCH' }) } },
-      { label: 'Create New Tab', shortcut: '⌘T', action: () => handleCreateTab() },
-      { label: 'Save Active Request', shortcut: '⌘S', action: () => handleSaveToCollection() },
-      { label: 'Switch Light/Dark Theme', shortcut: 'T', action: () => handleToggleTheme() },
-      { label: 'Open Environment Settings', shortcut: 'Shift+⌘+E', action: () => setIsEnvModalOpen(true) },
-      { label: 'Clear Request History', shortcut: 'L', action: () => setHistory([]) },
-      { label: 'Back to Home Landing', shortcut: 'Esc', action: () => setCurrentView('landing') }
-    ];
-
-    const filtered = commandsList.filter(c => c.label.toLowerCase().includes(search.toLowerCase()));
-
-    const handleKeyDown = (e: React.KeyboardEvent) => {
-      if (e.key === 'ArrowDown') {
-        e.preventDefault();
-        setSelectedIndex(prev => (prev + 1) % filtered.length);
-      } else if (e.key === 'ArrowUp') {
-        e.preventDefault();
-        setSelectedIndex(prev => (prev - 1 + filtered.length) % filtered.length);
-      } else if (e.key === 'Enter') {
-        e.preventDefault();
-        if (filtered[selectedIndex]) {
-          filtered[selectedIndex].action();
-          setShowCommandPalette(false);
-        }
-      } else if (e.key === 'Escape') {
-        e.preventDefault();
-        setShowCommandPalette(false);
-      }
-    };
-
-    return (
-      <div className="notion-command-palette-overlay" onClick={() => setShowCommandPalette(false)}>
-        <div className="notion-command-palette" onClick={e => e.stopPropagation()} onKeyDown={handleKeyDown}>
-          <div className="notion-command-palette-input-wrapper">
-            <Search size={16} style={{ color: 'var(--text-secondary)' }} />
-            <input 
-              ref={inputRef}
-              type="text" 
-              placeholder="Type a command or search..." 
-              value={search}
-              onChange={e => { setSearch(e.target.value); setSelectedIndex(0); }}
-              className="notion-command-palette-input"
-            />
-          </div>
-          <div className="notion-command-palette-list">
-            {filtered.length === 0 ? (
-              <div style={{ padding: '8px 12px', fontSize: '13px', color: 'var(--text-secondary)', fontStyle: 'italic' }}>
-                No commands found
-              </div>
-            ) : (
-              filtered.map((c, idx) => {
-                const isSel = idx === selectedIndex;
-                return (
-                  <div 
-                    key={c.label} 
-                    className={`notion-command-palette-item ${isSel ? 'selected' : ''}`}
-                    onClick={() => { c.action(); setShowCommandPalette(false); }}
-                    onMouseEnter={() => setSelectedIndex(idx)}
-                  >
-                    <span>{c.label}</span>
-                    <span className="notion-command-palette-shortcut">{c.shortcut}</span>
-                  </div>
-                );
-              })
-            )}
-          </div>
-        </div>
-      </div>
-    );
-  };
 
   const handleUpdateCollectionEmoji = (colId: string, emoji: string) => {
     setCollections(prev => prev.map(c => c.id === colId ? { ...c, emoji } : c));
@@ -1015,7 +930,18 @@ export default function App() {
       />
 
       {/* 5. Custom Overlay modals (Features 2, 11, 12) */}
-      {showCommandPalette && <CommandPalette />}
+      <CommandPalette 
+        show={showCommandPalette}
+        onClose={() => setShowCommandPalette(false)}
+        activeTab={activeTab}
+        onUpdateActiveTabRequest={handleUpdateActiveTabRequest}
+        onCreateTab={() => handleCreateTab()}
+        onSaveToCollection={handleSaveToCollection}
+        onToggleTheme={handleToggleTheme}
+        onOpenEnvModal={() => setIsEnvModalOpen(true)}
+        onClearHistory={() => setHistory([])}
+        onBackToLanding={() => setCurrentView('landing')}
+      />
 
       {showShortcutsModal && (
         <div className="notion-modal-overlay" onClick={() => setShowShortcutsModal(false)}>
@@ -1075,3 +1001,118 @@ export default function App() {
     </div>
   );
 }
+
+interface CommandPaletteProps {
+  show: boolean;
+  onClose: () => void;
+  activeTab: Tab | undefined;
+  onUpdateActiveTabRequest: (state: RequestState) => void;
+  onCreateTab: () => void;
+  onSaveToCollection: () => void;
+  onToggleTheme: () => void;
+  onOpenEnvModal: () => void;
+  onClearHistory: () => void;
+  onBackToLanding: () => void;
+}
+
+const CommandPalette: React.FC<CommandPaletteProps> = ({
+  show,
+  onClose,
+  activeTab,
+  onUpdateActiveTabRequest,
+  onCreateTab,
+  onSaveToCollection,
+  onToggleTheme,
+  onOpenEnvModal,
+  onClearHistory,
+  onBackToLanding
+}) => {
+  const [search, setSearch] = useState('');
+  const [selectedIndex, setSelectedIndex] = useState(0);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (show) {
+      setTimeout(() => {
+        inputRef.current?.focus();
+      }, 50);
+    }
+  }, [show]);
+
+  const commandsList = [
+    { label: 'Set Method to GET', shortcut: 'G', action: () => { activeTab && onUpdateActiveTabRequest({ ...activeTab.requestState, method: 'GET' }) } },
+    { label: 'Set Method to POST', shortcut: 'P', action: () => { activeTab && onUpdateActiveTabRequest({ ...activeTab.requestState, method: 'POST' }) } },
+    { label: 'Set Method to PUT', shortcut: 'U', action: () => { activeTab && onUpdateActiveTabRequest({ ...activeTab.requestState, method: 'PUT' }) } },
+    { label: 'Set Method to DELETE', shortcut: 'D', action: () => { activeTab && onUpdateActiveTabRequest({ ...activeTab.requestState, method: 'DELETE' }) } },
+    { label: 'Set Method to PATCH', shortcut: 'H', action: () => { activeTab && onUpdateActiveTabRequest({ ...activeTab.requestState, method: 'PATCH' }) } },
+    { label: 'Create New Tab', shortcut: '⌘T', action: () => onCreateTab() },
+    { label: 'Save Active Request', shortcut: '⌘S', action: () => onSaveToCollection() },
+    { label: 'Switch Light/Dark Theme', shortcut: 'T', action: () => onToggleTheme() },
+    { label: 'Open Environment Settings', shortcut: 'Shift+⌘+E', action: () => onOpenEnvModal() },
+    { label: 'Clear Request History', shortcut: 'L', action: () => onClearHistory() },
+    { label: 'Back to Home Landing', shortcut: 'Esc', action: () => onBackToLanding() }
+  ];
+
+  const filtered = commandsList.filter(c => c.label.toLowerCase().includes(search.toLowerCase()));
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setSelectedIndex(prev => (prev + 1) % (filtered.length || 1));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setSelectedIndex(prev => (prev - 1 + filtered.length) % (filtered.length || 1));
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      if (filtered[selectedIndex]) {
+        filtered[selectedIndex].action();
+        onClose();
+      }
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      onClose();
+    }
+  };
+
+  if (!show) return null;
+
+  return (
+    <div className="notion-command-palette-overlay" onClick={onClose}>
+      <div className="notion-command-palette" onClick={e => e.stopPropagation()} onKeyDown={handleKeyDown}>
+        <div className="notion-command-palette-input-wrapper">
+          <Search size={16} style={{ color: 'var(--text-secondary)' }} />
+          <input 
+            ref={inputRef}
+            type="text" 
+            placeholder="Type a command or search..." 
+            value={search}
+            onChange={e => { setSearch(e.target.value); setSelectedIndex(0); }}
+            className="notion-command-palette-input"
+          />
+        </div>
+        <div className="notion-command-palette-list">
+          {filtered.length === 0 ? (
+            <div style={{ padding: '8px 12px', fontSize: '13px', color: 'var(--text-secondary)', fontStyle: 'italic' }}>
+              No commands found
+            </div>
+          ) : (
+            filtered.map((c, idx) => {
+              const isSel = idx === selectedIndex;
+              return (
+                <div 
+                  key={c.label} 
+                  className={`notion-command-palette-item ${isSel ? 'selected' : ''}`}
+                  onClick={() => { c.action(); onClose(); }}
+                  onMouseEnter={() => setSelectedIndex(idx)}
+                >
+                  <span>{c.label}</span>
+                  <span className="notion-command-palette-shortcut">{c.shortcut}</span>
+                </div>
+              );
+            })
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
