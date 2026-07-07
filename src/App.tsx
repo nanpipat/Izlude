@@ -79,6 +79,15 @@ export default function App() {
     return () => window.removeEventListener('keydown', handleGlobalKeyDown);
   }, [tabs, activeTabId, environments, selectedEnvId]);
 
+  // Close emojis on any global clicks (Feature 11)
+  useEffect(() => {
+    const handleOutsideClick = () => {
+      setOpenEmojiTabId(null);
+    };
+    document.addEventListener('click', handleOutsideClick);
+    return () => document.removeEventListener('click', handleOutsideClick);
+  }, []);
+
   // Sync theme with HTML root class
   useEffect(() => {
     localStorage.setItem('izlude_theme', theme);
@@ -763,14 +772,7 @@ export default function App() {
     }));
   };
 
-  // Close emojis on any global clicks
-  useEffect(() => {
-    const handleOutsideClick = () => {
-      setOpenEmojiTabId(null);
-    };
-    document.addEventListener('click', handleOutsideClick);
-    return () => document.removeEventListener('click', handleOutsideClick);
-  }, []);
+
 
   return (
     <div style={{ display: 'flex', width: '100%', height: '100%', overflow: 'hidden' }}>
