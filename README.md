@@ -1,10 +1,10 @@
-# Izlude 🚀
+# Izlude
 
 [![Publish Release](https://github.com/nanpipat/Izlude/actions/workflows/release.yml/badge.svg)](https://github.com/nanpipat/Izlude/actions/workflows/release.yml)
 [![Vercel Deployment](https://img.shields.io/badge/Deploy-Vercel-black?logo=vercel&logoColor=white)](https://vercel.com)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-**Izlude** is a minimalist, ultra-lightweight, and high-performance API client designed with a clean monochrome aesthetic. Built with **Tauri, Rust, and React**, Izlude removes the heavy Electron bloat of traditional clients, compiling down to a ~5MB native binary that launches instantly and uses minimal RAM.
+**Izlude** is a minimal API client. It sends requests, shows the response, and otherwise stays out of the way. Built with **Tauri, Rust, and React** on the OS WebView — a roughly 5MB native binary that launches fast and uses little RAM, with no Electron in the loop.
 
 ---
 

@@ -1,13 +1,17 @@
-import React, { useState, useEffect } from 'react';
-import { 
-  History, 
-  Plus, 
-  Trash2, 
-  ChevronRight, 
-  ChevronDown, 
-  PlusCircle, 
-  Settings, 
-  Search
+import React, { useState, useEffect, useRef } from 'react';
+import {
+  History,
+  Plus,
+  Trash2,
+  ChevronRight,
+  ChevronDown,
+  PlusCircle,
+  Settings,
+  Search,
+  Copy,
+  Download,
+  Upload,
+  SlidersHorizontal
 } from 'lucide-react';
 import { type Collection, type HistoryItem, type Environment, type RequestState, type Method } from '../types';
 
@@ -18,13 +22,17 @@ interface SidebarProps {
   selectedEnvId: string;
   onSelectEnvironment: (id: string) => void;
   onOpenEnvironmentModal: () => void;
+  onOpenSettings: () => void;
   onSelectRequest: (request: RequestState, name: string, emoji?: string, notes?: string) => void;
   onCreateCollection: (name: string) => void;
-  onCreateRequestInCollection: (collectionId: string, name: string) => void;
+  onCreateRequestInCollection: (collectionId: string) => void;
+  onDuplicateRequest?: (collectionId: string, requestId: string) => void;
   onDeleteCollection: (collectionId: string) => void;
   onDeleteRequestInCollection: (collectionId: string, requestId: string) => void;
   onClearHistory: () => void;
   onDeleteHistoryItem: (id: string) => void;
+  onExportCollections?: () => void;
+  onImportCollections?: (file: File) => void;
   theme: 'light' | 'dark';
   onToggleTheme: () => void;
   onBackToLanding?: () => void;
@@ -39,13 +47,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
   selectedEnvId,
   onSelectEnvironment,
   onOpenEnvironmentModal,
+  onOpenSettings,
   onSelectRequest,
   onCreateCollection,
   onCreateRequestInCollection,
+  onDuplicateRequest,
   onDeleteCollection,
   onDeleteRequestInCollection,
   onClearHistory,
   onDeleteHistoryItem,
+  onExportCollections,
+  onImportCollections,
   theme,
   onToggleTheme,
   onBackToLanding,
@@ -61,9 +73,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const [activeEmojiPicker, setActiveEmojiPicker] = useState<{ type: 'collection' | 'request'; colId: string; reqId?: string } | null>(null);
   const [pickerCoords, setPickerCoords] = useState({ top: 0, left: 0 });
 
+  // Right-click context menu for saved requests
+  const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; colId: string; reqId: string } | null>(null);
+  const importInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Keyboard navigation state for the history list
+  const [historyCursor, setHistoryCursor] = useState<number>(-1);
+
   useEffect(() => {
     const handleClosePickers = () => {
       setActiveEmojiPicker(null);
+      setCtxMenu(null);
     };
     document.addEventListener('click', handleClosePickers);
     return () => document.removeEventListener('click', handleClosePickers);
@@ -83,10 +103,30 @@ export const Sidebar: React.FC<SidebarProps> = ({
   };
 
   const handleCreateRequest = (collectionId: string) => {
-    const name = prompt('Enter request name:');
-    if (name) {
-      onCreateRequestInCollection(collectionId, name);
-      setExpandedCollections(prev => ({ ...prev, [collectionId]: true }));
+    onCreateRequestInCollection(collectionId);
+    setExpandedCollections(prev => ({ ...prev, [collectionId]: true }));
+  };
+
+  const handleImportClick = () => importInputRef.current?.click();
+  const handleImportFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file && onImportCollections) onImportCollections(file);
+    e.target.value = '';
+  };
+
+  // Arrow-key navigation in the history list
+  const handleHistoryKeyDown = (e: React.KeyboardEvent) => {
+    if (history.length === 0) return;
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setHistoryCursor(prev => Math.min(prev + 1, history.length - 1));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setHistoryCursor(prev => Math.max(prev - 1, 0));
+    } else if (e.key === 'Enter' && historyCursor >= 0 && history[historyCursor]) {
+      e.preventDefault();
+      const item = history[historyCursor];
+      onSelectRequest(item.requestState, item.url);
     }
   };
 
@@ -121,18 +161,20 @@ export const Sidebar: React.FC<SidebarProps> = ({
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <img src="/favicon.svg" style={{ width: '20px', height: '20px', borderRadius: '4px' }} alt="logo" />
-          <span style={{ fontWeight: '600', fontSize: '15px' }}>Izlude</span>
+          <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, fontSize: '14px', letterSpacing: '-0.01em' }}>izlude</span>
         </div>
         {!isTauri && onBackToLanding && (
-          <button 
+          <button
             onClick={onBackToLanding}
-            style={{ 
-              fontSize: '11px', 
-              color: 'var(--text-secondary)', 
-              padding: '2px 6px', 
-              border: '1px solid var(--border-color)', 
-              borderRadius: '4px',
-              backgroundColor: 'var(--bg-primary)'
+            style={{
+              fontFamily: 'var(--font-mono)',
+              fontSize: '10.5px',
+              color: 'var(--text-secondary)',
+              padding: '2px 8px',
+              border: '1px solid var(--border-color)',
+              borderRadius: '2px',
+              backgroundColor: 'var(--bg-primary)',
+              letterSpacing: '0.04em'
             }}
           >
             ← Home
@@ -143,12 +185,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
       {/* Environments Section */}
       <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border-color)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-          <span style={{ fontSize: '11px', fontWeight: '600', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.14em' }}>
             Environment
           </span>
-          <button className="notion-icon-btn" onClick={onOpenEnvironmentModal} title="Manage Environments">
-            <Settings size={14} />
-          </button>
+          <div style={{ display: 'flex', gap: '2px' }}>
+            <button className="icon-btn" onClick={onOpenSettings} aria-label="Settings" title="Settings">
+              <SlidersHorizontal size={13} />
+            </button>
+            <button className="icon-btn" onClick={onOpenEnvironmentModal} aria-label="Manage environments" title="Manage environments">
+              <Settings size={14} />
+            </button>
+          </div>
         </div>
         <div style={{ display: 'flex', gap: '8px' }}>
           <select 
@@ -187,12 +234,31 @@ export const Sidebar: React.FC<SidebarProps> = ({
         {/* Collections Section */}
         <div style={{ padding: '12px 16px 8px 16px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-            <span style={{ fontSize: '11px', fontWeight: '600', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.14em' }}>
               Collections
             </span>
-            <button className="notion-icon-btn" onClick={() => setShowAddCollectionInput(!showAddCollectionInput)} title="New Collection">
-              <Plus size={14} />
-            </button>
+            <div style={{ display: 'flex', gap: '2px' }}>
+              {onExportCollections && (
+                <button className="icon-btn" onClick={onExportCollections} aria-label="Export collections" title="Export collections" disabled={collections.length === 0}>
+                  <Download size={13} />
+                </button>
+              )}
+              {onImportCollections && (
+                <button className="icon-btn" onClick={handleImportClick} aria-label="Import collections" title="Import collections">
+                  <Upload size={13} />
+                </button>
+              )}
+              <input
+                ref={importInputRef}
+                type="file"
+                accept="application/json,.json"
+                onChange={handleImportFile}
+                style={{ display: 'none' }}
+              />
+              <button className="icon-btn" onClick={() => setShowAddCollectionInput(!showAddCollectionInput)} aria-label="New collection" title="New collection">
+                <Plus size={14} />
+              </button>
+            </div>
           </div>
 
           {showAddCollectionInput && (
@@ -245,10 +311,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
                         </span>
                       </div>
                       <div className="hover-actions" style={{ display: 'flex', alignItems: 'center', gap: '2px' }} onClick={(e) => e.stopPropagation()}>
-                        <button className="notion-icon-btn" onClick={() => handleCreateRequest(col.id)} title="Add Request">
+                        <button className="icon-btn" onClick={() => handleCreateRequest(col.id)} title="Add Request">
                           <PlusCircle size={12} />
                         </button>
-                        <button className="notion-icon-btn" onClick={() => onDeleteCollection(col.id)} title="Delete Collection">
+                        <button className="icon-btn" onClick={() => onDeleteCollection(col.id)} title="Delete Collection">
                           <Trash2 size={12} />
                         </button>
                       </div>
@@ -270,30 +336,37 @@ export const Sidebar: React.FC<SidebarProps> = ({
                               borderRadius: '4px',
                               cursor: 'pointer',
                               marginBottom: '1px'
-                            }} className="sidebar-subitem hover-row" onClick={() => onSelectRequest(req.requestState, req.name, req.emoji, req.notes)}>
+                            }} className="sidebar-subitem hover-row"
+                              onClick={() => onSelectRequest(req.requestState, req.name, req.emoji, req.notes)}
+                              onContextMenu={(e) => {
+                                e.preventDefault();
+                                setCtxMenu({ x: e.clientX, y: e.clientY, colId: col.id, reqId: req.id });
+                              }}
+                            >
                               <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 }}>
-                                <span 
+                                <span
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     setActiveEmojiPicker({ type: 'request', colId: col.id, reqId: req.id });
                                     setPickerCoords({ top: e.clientY + 12, left: e.clientX });
                                   }}
                                   style={{ cursor: 'pointer', fontSize: '13px', marginRight: '2px' }}
-                                  title="Change Emoji"
+                                  title="Change emoji"
+                                  aria-label={`Change emoji for ${req.name}`}
                                 >
                                   {req.emoji || '📄'}
                                 </span>
                                 <span className={getMethodBadgeClass(req.requestState.method)} style={{ scale: '0.85', transformOrigin: 'left center' }}>
                                   {req.requestState.method}
                                 </span>
-                                <span style={{ fontSize: '12px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                <span style={{ fontSize: '12px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={req.name}>
                                   {req.name}
                                 </span>
                               </div>
-                              <button className="hover-actions notion-icon-btn" onClick={(e) => {
+                              <button className="hover-actions icon-btn" onClick={(e) => {
                                 e.stopPropagation();
                                 onDeleteRequestInCollection(col.id, req.id);
-                              }} title="Delete Request">
+                              }} aria-label={`Delete ${req.name}`} title="Delete request">
                                 <Trash2 size={11} />
                               </button>
                             </div>
@@ -313,7 +386,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
               <History size={12} style={{ color: 'var(--text-secondary)' }} />
-              <span style={{ fontSize: '11px', fontWeight: '600', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.14em' }}>
                 History
               </span>
             </div>
@@ -324,13 +397,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
             )}
           </div>
 
-          <div style={{ maxHeight: '200px', overflowY: 'auto' }}>
+          <div style={{ maxHeight: '200px', overflowY: 'auto' }} tabIndex={0} onKeyDown={handleHistoryKeyDown} aria-label="Request history, use arrow keys to navigate">
             {history.length === 0 ? (
               <div style={{ padding: '8px 4px', fontSize: '12px', color: 'var(--text-secondary)', fontStyle: 'italic' }}>
                 No history
               </div>
             ) : (
-              history.map(item => (
+              history.map((item, idx) => {
+                const isCursor = idx === historyCursor;
+                return (
                 <div key={item.id} style={{
                   display: 'flex',
                   alignItems: 'center',
@@ -338,8 +413,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   padding: '4px 6px',
                   borderRadius: '4px',
                   cursor: 'pointer',
-                  marginBottom: '2px'
-                }} className="sidebar-subitem hover-row" onClick={() => onSelectRequest(item.requestState, item.url)}>
+                  marginBottom: '2px',
+                  backgroundColor: isCursor ? 'var(--bg-hover)' : 'transparent'
+                }} className="sidebar-subitem hover-row" onClick={() => onSelectRequest(item.requestState, item.url)} onMouseEnter={() => setHistoryCursor(idx)}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 }}>
                     <span className={getMethodBadgeClass(item.method)} style={{ scale: '0.85', transformOrigin: 'left center' }}>
                       {item.method}
@@ -349,18 +425,19 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     </span>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                    <span style={{ fontSize: '10px', color: item.status >= 200 && item.status < 300 ? 'var(--color-success)' : 'var(--color-danger)' }}>
+                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', color: item.status >= 200 && item.status < 300 ? 'var(--color-success)' : (item.status === 0 ? 'var(--color-danger)' : 'var(--color-warning)') }}>
                       {item.status || 'ERR'}
                     </span>
-                    <button className="hover-actions notion-icon-btn" onClick={(e) => {
+                    <button className="hover-actions icon-btn" onClick={(e) => {
                       e.stopPropagation();
                       onDeleteHistoryItem(item.id);
-                    }}>
+                    }} aria-label="Delete history item">
                       <Trash2 size={11} />
                     </button>
                   </div>
                 </div>
-              ))
+                );
+              })
             )}
           </div>
         </div>
@@ -368,7 +445,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
       {/* Sidebar Footer with Theme Toggle */}
       <div style={{
-        padding: '12px 16px',
+        padding: '10px 16px',
         borderTop: '1px solid var(--border-color)',
         display: 'flex',
         alignItems: 'center',
@@ -376,34 +453,66 @@ export const Sidebar: React.FC<SidebarProps> = ({
         marginTop: 'auto',
         backgroundColor: 'var(--bg-secondary)'
       }}>
-        <div style={{ fontSize: '11px', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-          <img src="/favicon.svg" style={{ width: '14px', height: '14px' }} alt="logo" />
-          <span>Izlude v0.1.0</span>
+        <div style={{ fontFamily: 'var(--font-mono)', fontSize: '10.5px', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <img src="/favicon.svg" style={{ width: '14px', height: '14px', borderRadius: '3px' }} alt="logo" />
+          <span>izlude / v0.2.0</span>
         </div>
-        <button 
+        <button
           onClick={onToggleTheme}
           style={{
-            padding: '4px 8px',
-            fontSize: '11px',
+            padding: '3px 8px',
+            fontSize: '10px',
+            fontFamily: 'var(--font-mono)',
+            fontWeight: 600,
+            letterSpacing: '0.08em',
             border: '1px solid var(--border-color)',
-            borderRadius: '4px',
+            borderRadius: '2px',
             color: 'var(--text-secondary)',
             display: 'flex',
             alignItems: 'center',
             gap: '4px',
-            backgroundColor: 'var(--bg-primary)'
+            backgroundColor: 'var(--bg-primary)',
+            textTransform: 'uppercase'
           }}
         >
-          {theme === 'dark' ? '☀️ Light' : '🌙 Dark'}
+          {theme === 'dark' ? 'Light' : 'Dark'}
         </button>
       </div>
 
+      {/* Right-click context menu for saved requests */}
+      {ctxMenu && (
+        <div
+          className="ctx-menu"
+          style={{ position: 'fixed', top: `${ctxMenu.y}px`, left: `${ctxMenu.x}px` }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <button
+            className="ctx-menu-item"
+            onClick={() => {
+              onDuplicateRequest?.(ctxMenu.colId, ctxMenu.reqId);
+              setCtxMenu(null);
+            }}
+          >
+            <Copy size={13} /> Duplicate
+          </button>
+          <button
+            className="ctx-menu-item danger"
+            onClick={() => {
+              onDeleteRequestInCollection(ctxMenu.colId, ctxMenu.reqId);
+              setCtxMenu(null);
+            }}
+          >
+            <Trash2 size={13} /> Delete
+          </button>
+        </div>
+      )}
+
       {activeEmojiPicker && (
-        <div className="notion-emoji-popover" style={{ top: `${pickerCoords.top}px`, left: `${pickerCoords.left}px` }} onClick={e => e.stopPropagation()}>
+        <div className="emoji-popover" style={{ top: `${pickerCoords.top}px`, left: `${pickerCoords.left}px` }} onClick={e => e.stopPropagation()}>
           {['🔑', '💳', '📦', '👤', '⚙️', '📁', '📄', '🌐', '🚀', '🧪', '🔍', '📈', '💬', '⚠️', '✅', '❌', '⏱️', '🛠️'].map(emoji => (
-            <div 
-              key={emoji} 
-              className="notion-emoji-btn" 
+            <div
+              key={emoji}
+              className="emoji-btn"
               onClick={() => {
                 if (activeEmojiPicker.type === 'collection') {
                   onUpdateCollectionEmoji?.(activeEmojiPicker.colId, emoji);

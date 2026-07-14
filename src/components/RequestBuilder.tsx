@@ -1,17 +1,18 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Plus, Trash2, Copy, Check, Sparkles, Terminal, ChevronDown, ChevronRight } from 'lucide-react';
+import { Plus, Trash2, Copy, Check, Sparkles, Terminal, ChevronDown, ChevronRight, StickyNote } from 'lucide-react';
 import { type RequestState, type Method, type KeyValuePair, type AuthType, type BodyType, type RawBodyType, type AuthState } from '../types';
 import { parseCurl, generateCurl } from '../utils/curlParser';
 import CodeMirror from '@uiw/react-codemirror';
 import { json as jsonLang } from '@codemirror/lang-json';
-import { notionThemeExtension } from '../utils/codemirrorTheme';
+import { izludeThemeExtension } from '../utils/codemirrorTheme';
+import { useDialog } from './Dialogs';
 
 interface RequestBuilderProps {
   requestState: RequestState;
   onChangeRequestState: (state: RequestState) => void;
   onSend: () => void;
   isLoading: boolean;
-  activeVariables: { key: string; value: string; enabled: boolean }[];
+  activeVariables: { key: string; value: string; enabled: boolean; secret?: boolean }[];
   notes?: string;
   onChangeNotes?: (notes: string) => void;
 }
@@ -67,6 +68,7 @@ export const RequestBuilder: React.FC<RequestBuilderProps> = ({
   notes,
   onChangeNotes
 }) => {
+  const dialog = useDialog();
   const [activeTab, setActiveTab] = useState<'params' | 'headers' | 'body' | 'auth'>('params');
   const [showCurlModal, setShowCurlModal] = useState(false);
   const [curlInput, setCurlInput] = useState('');
@@ -188,21 +190,26 @@ export const RequestBuilder: React.FC<RequestBuilderProps> = ({
 
   const handleUrlChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
-    
-    if (val.trim().toLowerCase().startsWith('curl ')) {
+    updateFieldById('url', val);
+    handleInputAutocomplete(e.target, 'url', val);
+  };
+
+  // cURL import only triggers on paste — typing "curl" character-by-character
+  // used to misfire parse on incomplete input and clobber the URL field.
+  const handleUrlPaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
+    const pasted = e.clipboardData.getData('text');
+    if (pasted.trim().toLowerCase().startsWith('curl ')) {
+      e.preventDefault();
       try {
-        const parsed = parseCurl(val);
+        const parsed = parseCurl(pasted);
         onChangeRequestState(parsed);
         setToastMessage("Imported cURL command details successfully!");
-        return;
       } catch (err: any) {
         setToastMessage("Failed to parse cURL: " + err.message);
       }
     }
-
-    updateFieldById('url', val);
-    handleInputAutocomplete(e.target, 'url', val);
   };
+
 
   const handleInputAutocomplete = (
     input: HTMLInputElement, 
@@ -624,7 +631,7 @@ export const RequestBuilder: React.FC<RequestBuilderProps> = ({
 
   const calculatedHeaders = getCalculatedHeaders();
 
-  const handleImportCurl = () => {
+  const handleImportCurl = async () => {
     try {
       if (curlInput.trim()) {
         const parsed = parseCurl(curlInput);
@@ -634,7 +641,12 @@ export const RequestBuilder: React.FC<RequestBuilderProps> = ({
         setToastMessage("Imported cURL request details successfully!");
       }
     } catch (err: any) {
-      alert('Error parsing cURL: ' + err.message);
+      await dialog.confirm({
+        title: 'Could not parse cURL',
+        message: err?.message || 'The pasted command could not be read as a cURL request.',
+        confirmLabel: 'OK',
+        cancelLabel: 'OK',
+      });
     }
   };
 
@@ -661,18 +673,19 @@ export const RequestBuilder: React.FC<RequestBuilderProps> = ({
 
     return (
       <div className="resolved-vars-bar">
-        <span style={{ color: 'var(--text-secondary)', marginRight: '4px', fontWeight: '500' }}>Resolved variables:</span>
+        <span style={{ color: 'var(--text-secondary)', marginRight: '4px', fontWeight: 500 }}>Resolved:</span>
         {Array.from(foundKeys).map(key => {
           const variable = activeVariables.find(v => v.key === key && v.enabled);
           const exists = !!variable;
-          const resolvedValue = exists ? variable.value : 'Undefined';
+          const isSecret = !!variable?.secret;
+          const resolvedValue = exists ? (isSecret ? '••••••' : variable.value) : 'Undefined';
           return (
-            <span 
-              key={key} 
+            <span
+              key={key}
               className={`resolved-var-badge ${exists ? 'success' : 'danger'}`}
-              title={`${key} ➔ ${resolvedValue}`}
+              title={`${key} → ${isSecret ? '(secret, hidden)' : resolvedValue}`}
             >
-              {key}: {resolvedValue.length > 20 ? resolvedValue.slice(0, 20) + '...' : resolvedValue}
+              {key}: {isSecret ? '••••••' : (resolvedValue.length > 20 ? resolvedValue.slice(0, 20) + '…' : resolvedValue)}
             </span>
           );
         })}
@@ -694,21 +707,21 @@ export const RequestBuilder: React.FC<RequestBuilderProps> = ({
       {toastMessage && (
         <div style={{
           position: 'absolute',
-          top: '20px',
+          top: '16px',
           left: '50%',
           transform: 'translateX(-50%)',
-          backgroundColor: '#37352f',
-          color: '#ffffff',
-          padding: '6px 16px',
-          borderRadius: '4px',
-          fontSize: '12px',
-          boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+          backgroundColor: 'var(--text-primary)',
+          color: 'var(--bg-primary)',
+          padding: '5px 14px',
+          borderRadius: '2px',
+          fontFamily: 'var(--font-mono)',
+          fontSize: '11.5px',
           zIndex: 1000,
           display: 'flex',
           alignItems: 'center',
           gap: '8px'
         }}>
-          <Sparkles size={14} style={{ color: 'var(--color-warning)' }} />
+          <Sparkles size={13} style={{ color: 'var(--color-warning)' }} />
           <span>{toastMessage}</span>
         </div>
       )}
@@ -738,54 +751,60 @@ export const RequestBuilder: React.FC<RequestBuilderProps> = ({
           
           <div className="address-bar-divider"></div>
           
-          <input 
-            type="text" 
-            placeholder="Enter request URL or paste cURL command..." 
+          <input
+            type="text"
+            placeholder="Enter request URL or paste cURL command…"
             value={url}
             onChange={handleUrlChange}
+            onPaste={handleUrlPaste}
             onKeyDown={handleKeyDown}
             className="address-bar-input"
             data-field="url"
           />
         </div>
 
-        <button 
-          onClick={onSend} 
+        <button
+          onClick={onSend}
           disabled={isLoading}
           className="primary accented"
           style={{
-            padding: '8px 24px',
-            fontWeight: '500',
-            minWidth: '90px',
+            padding: '8px 22px',
+            fontFamily: 'var(--font-mono)',
+            fontWeight: 600,
+            letterSpacing: '0.06em',
+            minWidth: '96px',
             height: '38px',
-            borderRadius: '6px'
+            borderRadius: '3px',
+            textTransform: 'uppercase',
+            fontSize: '12px'
           }}
         >
-          {isLoading ? 'Sending...' : 'Send'}
+          {isLoading ? 'Sending…' : '▸ Send'}
         </button>
 
-        <button 
-          onClick={() => setShowCurlModal(true)} 
+        <button
+          onClick={() => setShowCurlModal(true)}
           className="outline"
           style={{
-            fontSize: '13px',
+            fontFamily: 'var(--font-mono)',
+            fontSize: '12px',
             padding: '8px 14px',
             height: '38px',
-            borderRadius: '6px'
+            borderRadius: '3px'
           }}
         >
           Import cURL
         </button>
 
-        <button 
-          onClick={handleCopyCurl} 
+        <button
+          onClick={handleCopyCurl}
           title="Copy as cURL"
           className="outline"
           style={{
             padding: '8px',
             height: '38px',
             width: '38px',
-            borderRadius: '6px',
+            borderRadius: '3px',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center'
@@ -800,19 +819,19 @@ export const RequestBuilder: React.FC<RequestBuilderProps> = ({
 
       {/* Description Notes Card (Feature 7) */}
       <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '-8px', marginBottom: '-4px' }}>
-        <button 
-          onClick={() => setShowNotes(!showNotes)} 
-          style={{ fontSize: '11px', color: 'var(--text-secondary)', padding: '2px 4px', border: 'none', backgroundColor: 'transparent', cursor: 'pointer' }}
+        <button
+          onClick={() => setShowNotes(!showNotes)}
+          style={{ fontFamily: 'var(--font-mono)', fontSize: '10.5px', color: 'var(--text-secondary)', padding: '2px 4px', border: 'none', backgroundColor: 'transparent', cursor: 'pointer' }}
         >
-          {showNotes ? 'Hide Description Notes' : 'Show Description Notes'}
+          {showNotes ? '− Hide notes' : '+ Show notes'}
         </button>
       </div>
 
       {showNotes && (
-        <div className="notion-callout info" style={{ marginTop: '0px', marginBottom: '8px' }}>
-          <div className="notion-callout-icon">📝</div>
-          <div className="notion-callout-content" style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-            <span style={{ fontWeight: '600', fontSize: '12.5px', color: 'var(--text-primary)' }}>Description Notes</span>
+        <div className="callout info" style={{ marginTop: '0px', marginBottom: '8px' }}>
+          <div className="callout-icon"><StickyNote size={15} style={{ color: 'var(--text-secondary)' }} /></div>
+          <div className="callout-content" style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600, fontSize: '10.5px', textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-secondary)' }}>Notes</span>
             <textarea
               value={notes || ''}
               onChange={e => onChangeNotes?.(e.target.value)}
@@ -842,13 +861,15 @@ export const RequestBuilder: React.FC<RequestBuilderProps> = ({
               key={tab}
               onClick={() => setActiveTab(tab)}
               style={{
-                fontSize: '13px',
-                fontWeight: activeTab === tab ? '600' : '400',
+                fontFamily: 'var(--font-mono)',
+                fontSize: '12px',
+                fontWeight: activeTab === tab ? 600 : 400,
+                letterSpacing: '0.02em',
                 color: activeTab === tab ? 'var(--text-primary)' : 'var(--text-secondary)',
                 borderBottom: activeTab === tab ? '2px solid var(--text-primary)' : '2px solid transparent',
                 borderRadius: '0px',
                 padding: '6px 4px',
-                textTransform: 'capitalize'
+                textTransform: 'lowercase'
               }}
             >
               {tab}
@@ -865,7 +886,7 @@ export const RequestBuilder: React.FC<RequestBuilderProps> = ({
           {/* PARAMS TAB */}
           {activeTab === 'params' && (
             <div>
-              <table className="notion-table">
+              <table className="kv-table">
                 <thead>
                   <tr>
                     <th style={{ width: '40px' }}></th>
@@ -918,7 +939,7 @@ export const RequestBuilder: React.FC<RequestBuilderProps> = ({
                         />
                       </td>
                       <td>
-                        <button className="hover-actions notion-icon-btn" onClick={() => removeRow(params, index, 'params')}>
+                        <button className="hover-actions icon-btn" onClick={() => removeRow(params, index, 'params')}>
                           <Trash2 size={13} />
                         </button>
                       </td>
@@ -939,7 +960,7 @@ export const RequestBuilder: React.FC<RequestBuilderProps> = ({
           {activeTab === 'headers' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               <div>
-                <table className="notion-table">
+                <table className="kv-table">
                   <thead>
                     <tr>
                       <th style={{ width: '40px' }}></th>
@@ -992,7 +1013,7 @@ export const RequestBuilder: React.FC<RequestBuilderProps> = ({
                           />
                         </td>
                         <td>
-                          <button className="hover-actions notion-icon-btn" onClick={() => removeRow(headers, index, 'headers')}>
+                          <button className="hover-actions icon-btn" onClick={() => removeRow(headers, index, 'headers')}>
                             <Trash2 size={13} />
                           </button>
                         </td>
@@ -1021,7 +1042,7 @@ export const RequestBuilder: React.FC<RequestBuilderProps> = ({
                   
                   {showCalculatedHeaders && (
                     <div style={{ marginTop: '8px', padding: '8px 12px', backgroundColor: 'var(--bg-secondary)', borderRadius: '4px' }}>
-                      <table className="notion-table" style={{ backgroundColor: 'transparent' }}>
+                      <table className="kv-table" style={{ backgroundColor: 'transparent' }}>
                         <thead>
                           <tr>
                             <th>Key</th>
@@ -1131,7 +1152,7 @@ export const RequestBuilder: React.FC<RequestBuilderProps> = ({
                   <CodeMirror
                     value={body.rawContent}
                     height="180px"
-                    extensions={[jsonLang(), notionThemeExtension]}
+                    extensions={[jsonLang(), izludeThemeExtension]}
                     onChange={(value) => {
                       setJsonError(null);
                       onChangeRequestState({
@@ -1155,7 +1176,7 @@ export const RequestBuilder: React.FC<RequestBuilderProps> = ({
                   style={{
                     width: '100%',
                     height: '180px',
-                    fontFamily: 'Courier, monospace',
+                    fontFamily: 'var(--font-mono)',
                     fontSize: '13px',
                     padding: '10px',
                     backgroundColor: 'var(--bg-secondary)',
@@ -1168,7 +1189,7 @@ export const RequestBuilder: React.FC<RequestBuilderProps> = ({
 
               {body.type === 'form-data' && (
                 <div>
-                  <table className="notion-table">
+                  <table className="kv-table">
                     <thead>
                       <tr>
                         <th style={{ width: '40px' }}></th>
@@ -1221,7 +1242,7 @@ export const RequestBuilder: React.FC<RequestBuilderProps> = ({
                             />
                           </td>
                           <td>
-                            <button className="hover-actions notion-icon-btn" onClick={() => removeRow(body.formData, index, 'formData')}>
+                            <button className="hover-actions icon-btn" onClick={() => removeRow(body.formData, index, 'formData')}>
                               <Trash2 size={13} />
                             </button>
                           </td>
@@ -1240,7 +1261,7 @@ export const RequestBuilder: React.FC<RequestBuilderProps> = ({
 
               {body.type === 'x-www-form-urlencoded' && (
                 <div>
-                  <table className="notion-table">
+                  <table className="kv-table">
                     <thead>
                       <tr>
                         <th style={{ width: '40px' }}></th>
@@ -1293,7 +1314,7 @@ export const RequestBuilder: React.FC<RequestBuilderProps> = ({
                             />
                           </td>
                           <td>
-                            <button className="hover-actions notion-icon-btn" onClick={() => removeRow(body.urlencoded, index, 'urlencoded')}>
+                            <button className="hover-actions icon-btn" onClick={() => removeRow(body.urlencoded, index, 'urlencoded')}>
                               <Trash2 size={13} />
                             </button>
                           </td>
@@ -1495,13 +1516,13 @@ export const RequestBuilder: React.FC<RequestBuilderProps> = ({
 
       {/* cURL Import Modal */}
       {showCurlModal && (
-        <div className="notion-modal-overlay">
-          <div className="notion-modal" style={{ width: '550px' }}>
-            <div className="notion-modal-header">
+        <div className="app-modal-overlay">
+          <div className="app-modal" style={{ width: '550px' }}>
+            <div className="app-modal-header">
               <h3 style={{ fontSize: '16px' }}>Import cURL Command</h3>
               <button onClick={() => setShowCurlModal(false)}>×</button>
             </div>
-            <div className="notion-modal-body">
+            <div className="app-modal-body">
               <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '10px' }}>
                 Paste a raw cURL command below to import its method, URL, headers, and request body.
               </p>
@@ -1522,7 +1543,7 @@ export const RequestBuilder: React.FC<RequestBuilderProps> = ({
                 }}
               />
             </div>
-            <div className="notion-modal-footer">
+            <div className="app-modal-footer">
               <button onClick={() => setShowCurlModal(false)}>Cancel</button>
               <button className="primary" onClick={handleImportCurl} disabled={!curlInput.trim()}>
                 Import Request

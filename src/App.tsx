@@ -3,10 +3,23 @@ import { Sidebar } from './components/Sidebar';
 import { RequestBuilder } from './components/RequestBuilder';
 import { ResponsePanel } from './components/ResponsePanel';
 import { EnvironmentModal } from './components/EnvironmentModal';
+import { SaveRequestModal } from './components/SaveRequestModal';
+import { SettingsModal } from './components/SettingsModal';
+import { useDialog } from './components/Dialogs';
 import { type Tab, type Collection, type HistoryItem, type Environment, type RequestState, DEFAULT_REQUEST_STATE, type ResponseState, type Method } from './types';
-import { Plus, X, Laptop, Terminal, Sparkles, Folder, Sun, Moon, Search, HelpCircle } from 'lucide-react';
+import { loadJSON, saveJSON } from './utils/storage';
+import { Plus, X, Sun, Moon, Search, HelpCircle, Copy as CopyIcon, Pencil } from 'lucide-react';
+
+export interface AppSettings {
+  requestTimeoutMs: number;   // 0 = no timeout
+  renderHtmlScripts: boolean; // opt-in for HTML preview JS
+}
+
+const DEFAULT_SETTINGS: AppSettings = { requestTimeoutMs: 0, renderHtmlScripts: false };
 
 export default function App() {
+  const dialog = useDialog();
+
   // App views: 'landing' (marketing page) or 'app' (main workspace)
   const [currentView, setCurrentView] = useState<'landing' | 'app'>(() => {
     const isTauri = typeof window !== 'undefined' && !!(window as any).__TAURI_INTERNALS__;
@@ -22,19 +35,23 @@ export default function App() {
 
   const [tabs, setTabs] = useState<Tab[]>([]);
   const [activeTabId, setActiveTabId] = useState<string>('');
-  
+
   const [collections, setCollections] = useState<Collection[]>([]);
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [environments, setEnvironments] = useState<Environment[]>([]);
   const [selectedEnvId, setSelectedEnvId] = useState<string>('none');
-  
+  const [settings, setSettings] = useState<AppSettings>(() => loadJSON('izlude_settings', DEFAULT_SETTINGS));
+
   const [isEnvModalOpen, setIsEnvModalOpen] = useState(false);
+  const [isSaveModalOpen, setIsSaveModalOpen] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   // Keyboard overlays & Emoji Picker state
   const [showCommandPalette, setShowCommandPalette] = useState(false);
   const [showShortcutsModal, setShowShortcutsModal] = useState(false);
   const [openEmojiTabId, setOpenEmojiTabId] = useState<string | null>(null);
   const [emojiCoords, setEmojiCoords] = useState({ top: 0, left: 0 });
+  const [tabCtxMenu, setTabCtxMenu] = useState<{ x: number; y: number; tabId: string } | null>(null);
 
   const activeTab = tabs.find(t => t.id === activeTabId);
 
@@ -79,10 +96,11 @@ export default function App() {
     return () => window.removeEventListener('keydown', handleGlobalKeyDown);
   }, [tabs, activeTabId, environments, selectedEnvId]);
 
-  // Close emojis on any global clicks (Feature 11)
+  // Close emojis + tab context menu on any global clicks
   useEffect(() => {
     const handleOutsideClick = () => {
       setOpenEmojiTabId(null);
+      setTabCtxMenu(null);
     };
     document.addEventListener('click', handleOutsideClick);
     return () => document.removeEventListener('click', handleOutsideClick);
@@ -102,17 +120,12 @@ export default function App() {
     setTheme(prev => prev === 'light' ? 'dark' : 'light');
   };
 
-  // Initial Workspace State Loading
+  // Initial Workspace State Loading (safe: corrupt storage won't crash the app)
   useEffect(() => {
-    const savedCollections = localStorage.getItem('izlude_collections');
-    const savedHistory = localStorage.getItem('izlude_history');
-    const savedEnvironments = localStorage.getItem('izlude_environments');
-    const savedSelectedEnvId = localStorage.getItem('izlude_selected_env_id');
-
-    if (savedCollections) setCollections(JSON.parse(savedCollections));
-    if (savedHistory) setHistory(JSON.parse(savedHistory));
-    if (savedEnvironments) setEnvironments(JSON.parse(savedEnvironments));
-    if (savedSelectedEnvId) setSelectedEnvId(savedSelectedEnvId);
+    setCollections(loadJSON<Collection[]>('izlude_collections', []));
+    setHistory(loadJSON<HistoryItem[]>('izlude_history', []));
+    setEnvironments(loadJSON<Environment[]>('izlude_environments', []));
+    setSelectedEnvId(loadJSON<string>('izlude_selected_env_id', 'none'));
 
     const defaultTab: Tab = {
       id: Math.random().toString(36).substring(2, 9),
@@ -126,24 +139,12 @@ export default function App() {
     setActiveTabId(defaultTab.id);
   }, []);
 
-  // Sync state changes with localStorage
-  useEffect(() => {
-    if (collections.length > 0) {
-      localStorage.setItem('izlude_collections', JSON.stringify(collections));
-    }
-  }, [collections]);
-
-  useEffect(() => {
-    localStorage.setItem('izlude_history', JSON.stringify(history));
-  }, [history]);
-
-  useEffect(() => {
-    localStorage.setItem('izlude_environments', JSON.stringify(environments));
-  }, [environments]);
-
-  useEffect(() => {
-    localStorage.setItem('izlude_selected_env_id', selectedEnvId);
-  }, [selectedEnvId]);
+  // Sync state changes with localStorage (debounced writes)
+  useEffect(() => { saveJSON('izlude_collections', collections); }, [collections]);
+  useEffect(() => { saveJSON('izlude_history', history); }, [history]);
+  useEffect(() => { saveJSON('izlude_environments', environments); }, [environments]);
+  useEffect(() => { saveJSON('izlude_selected_env_id', selectedEnvId); }, [selectedEnvId]);
+  useEffect(() => { saveJSON('izlude_settings', settings); }, [settings]);
 
   // Helper: Replace environment variables like {{variable_name}}
   const replaceEnvVariables = (input: string): string => {
@@ -180,12 +181,10 @@ export default function App() {
     setActiveTabId(newTab.id);
   };
 
-  const handleCloseTab = (id: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    
+  const performCloseTab = (id: string) => {
     const tabIndex = tabs.findIndex(t => t.id === id);
     const newTabs = tabs.filter(t => t.id !== id);
-    
+
     if (newTabs.length === 0) {
       const defaultTab: Tab = {
         id: Math.random().toString(36).substring(2, 9),
@@ -208,12 +207,34 @@ export default function App() {
     }
   };
 
-  const handleRenameTab = (id: string) => {
+  const handleCloseTab = async (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const target = tabs.find(t => t.id === id);
+    // Confirm before discarding unsaved edits
+    if (target?.isDirty) {
+      const ok = await dialog.confirm({
+        title: 'Close tab?',
+        message: `"${target.name}" has unsaved changes. Close anyway?`,
+        confirmLabel: 'Close',
+        danger: true,
+      });
+      if (!ok) return;
+    }
+    performCloseTab(id);
+  };
+
+  const handleRenameTab = async (id: string) => {
     const tab = tabs.find(t => t.id === id);
     if (!tab) return;
-    const newName = prompt('Enter new request name:', tab.name);
-    if (newName) {
-      setTabs(prev => prev.map(t => t.id === id ? { ...t, name: newName, isDirty: true } : t));
+    const newName = await dialog.prompt({
+      title: 'Rename request',
+      message: 'Enter a new name for this tab.',
+      defaultValue: tab.name,
+      placeholder: 'Request name',
+      confirmLabel: 'Rename',
+    });
+    if (newName && newName.trim()) {
+      setTabs(prev => prev.map(t => t.id === id ? { ...t, name: newName.trim(), isDirty: true } : t));
     }
   };
 
@@ -313,18 +334,20 @@ export default function App() {
 
       // Check for Tauri native env
       const isTauri = typeof window !== 'undefined' && !!(window as any).__TAURI_INTERNALS__;
+      const timeoutMs = settings.requestTimeoutMs;
 
       if (isTauri) {
         const { fetch: tauriFetch } = await import('@tauri-apps/plugin-http');
         const res = await tauriFetch(urlObj.toString(), {
           method,
           headers: reqHeaders,
-          body: reqBody
+          body: reqBody,
+          connectTimeout: timeoutMs > 0 ? timeoutMs : undefined,
         });
 
         responseStatus = res.status;
         responseStatusText = res.statusText || (res.status === 200 ? 'OK' : 'Response Status');
-        
+
         // Extract Headers from Headers Map
         res.headers.forEach((val, key) => {
           responseHeaders[key] = val;
@@ -334,24 +357,31 @@ export default function App() {
       } else {
         // Fallback to Vercel/Node Proxy server for standard web browsers
         const proxyUrl = 'http://localhost:3001/api/proxy';
-        const res = await fetch(proxyUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            url: urlObj.toString(),
-            method,
-            headers: reqHeaders,
-            body: reqBody
-          })
-        });
+        const controller = new AbortController();
+        const timer = timeoutMs > 0 ? setTimeout(() => controller.abort(), timeoutMs) : null;
+        try {
+          const res = await fetch(proxyUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              url: urlObj.toString(),
+              method,
+              headers: reqHeaders,
+              body: reqBody
+            }),
+            signal: controller.signal,
+          });
 
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || 'Proxy request failed');
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.error || 'Proxy request failed');
 
-        responseStatus = data.status;
-        responseStatusText = data.statusText;
-        responseHeaders = data.headers;
-        responseData = data.body;
+          responseStatus = data.status;
+          responseStatusText = data.statusText;
+          responseHeaders = data.headers;
+          responseData = data.body;
+        } finally {
+          if (timer) clearTimeout(timer);
+        }
       }
 
       const duration = Date.now() - startTime;
@@ -374,8 +404,9 @@ export default function App() {
         isLoading: false
       } : t));
 
-      // Append to History
-      const newHistoryItem: HistoryItem = {
+      // Append to History — successes land here, failures land in catch,
+      // but BOTH must record history so failed requests stay replayable.
+      appendHistory({
         id: Math.random().toString(36).substring(2, 9),
         method,
         url: urlObj.toString(),
@@ -384,17 +415,17 @@ export default function App() {
         timeMs: duration,
         timestamp: Date.now(),
         requestState: JSON.parse(JSON.stringify(activeTab.requestState))
-      };
-      setHistory(prev => [newHistoryItem, ...prev].slice(0, 50)); // Cap history list to 50 items
+      });
 
     } catch (err: any) {
       console.error(err);
       const duration = Date.now() - startTime;
+      const errorMessage = err?.message ? String(err.message) : 'Unknown error';
       const errorResponse: ResponseState = {
         status: 0,
         statusText: 'CORS Block / Connection Error',
         headers: {},
-        body: `Error executing API request:\n\n${err.message}\n\nNote: If using this client in a web browser, make sure the local Node.js proxy server is running. Native desktop app bypasses CORS automatically.`,
+        body: `Error executing API request:\n\n${errorMessage}\n\nNote: If using this client in a web browser, make sure the local Node.js proxy server is running. Native desktop app bypasses CORS automatically.`,
         isBinary: false,
         timeMs: duration,
         size: 0
@@ -404,7 +435,24 @@ export default function App() {
         responseState: errorResponse,
         isLoading: false
       } : t));
+
+      // Failed requests are recorded too — they're the ones most worth replaying.
+      appendHistory({
+        id: Math.random().toString(36).substring(2, 9),
+        method,
+        url: urlObj.toString(),
+        status: 0,
+        statusText: 'Error',
+        timeMs: duration,
+        timestamp: Date.now(),
+        requestState: JSON.parse(JSON.stringify(activeTab.requestState))
+      });
     }
+  };
+
+  // Append + cap (max 50) — shared by success and failure paths.
+  const appendHistory = (item: HistoryItem) => {
+    setHistory(prev => [item, ...prev].slice(0, 50));
   };
 
   const handleSelectRequest = (savedState: RequestState, name: string, emoji?: string, notes?: string) => {
@@ -448,65 +496,148 @@ export default function App() {
     }));
   };
 
-  const handleDeleteCollection = (collectionId: string) => {
-    if (confirm('Delete this collection and all requests inside it?')) {
-      setCollections(prev => prev.filter(c => c.id !== collectionId));
+  // Create a request in a collection via a dialog (replaces the native prompt).
+  const handleCreateRequestPrompt = async (collectionId: string) => {
+    const name = await dialog.prompt({
+      title: 'New request',
+      message: 'Enter a name for the new request.',
+      placeholder: 'Request name',
+      defaultValue: 'New Request',
+      confirmLabel: 'Create',
+    });
+    if (name && name.trim()) {
+      handleCreateRequestInCollection(collectionId, name.trim());
     }
   };
 
-  const handleDeleteRequestInCollection = (collectionId: string, requestId: string) => {
+  const handleDeleteCollection = async (collectionId: string) => {
+    const col = collections.find(c => c.id === collectionId);
+    const ok = await dialog.confirm({
+      title: 'Delete collection?',
+      message: `"${col?.name || 'This collection'}" and all ${col?.requests.length || 0} request(s) inside it will be removed.`,
+      confirmLabel: 'Delete',
+      danger: true,
+    });
+    if (ok) setCollections(prev => prev.filter(c => c.id !== collectionId));
+  };
+
+  const handleDeleteRequestInCollection = async (collectionId: string, requestId: string) => {
+    const col = collections.find(c => c.id === collectionId);
+    const req = col?.requests.find(r => r.id === requestId);
+    const ok = await dialog.confirm({
+      title: 'Delete request?',
+      message: `"${req?.name || 'This request'}" will be removed from "${col?.name || 'the collection'}".`,
+      confirmLabel: 'Delete',
+      danger: true,
+    });
+    if (!ok) return;
     setCollections(prev => prev.map(col => {
       if (col.id === collectionId) {
-        return {
-          ...col,
-          requests: col.requests.filter(r => r.id !== requestId)
-        };
+        return { ...col, requests: col.requests.filter(r => r.id !== requestId) };
       }
       return col;
     }));
   };
 
-  const handleSaveToCollection = () => {
-    const activeTab = tabs.find(t => t.id === activeTabId);
-    if (!activeTab) return;
+  // Duplicate a saved request in place (with a " (copy)" suffix).
+  const handleDuplicateRequest = (collectionId: string, requestId: string) => {
+    setCollections(prev => prev.map(col => {
+      if (col.id !== collectionId) return col;
+      const req = col.requests.find(r => r.id === requestId);
+      if (!req) return col;
+      const copy: Collection['requests'][number] = {
+        id: Math.random().toString(36).substring(2, 9),
+        name: `${req.name} (copy)`,
+        emoji: req.emoji,
+        notes: req.notes,
+        requestState: JSON.parse(JSON.stringify(req.requestState))
+      };
+      const idx = col.requests.findIndex(r => r.id === requestId);
+      const requests = [...col.requests];
+      requests.splice(idx + 1, 0, copy);
+      return { ...col, requests };
+    }));
+  };
 
+  const handleSaveToCollection = () => {
+    if (!tabs.find(t => t.id === activeTabId)) return;
     if (collections.length === 0) {
-      alert('Create a collection in the sidebar first to save requests!');
+      dialog.confirm({
+        title: 'No collections yet',
+        message: 'Create a collection in the sidebar first, then save requests into it.',
+        confirmLabel: 'OK',
+        cancelLabel: 'OK',
+      });
       return;
     }
+    setIsSaveModalOpen(true);
+  };
 
-    const colNames = collections.map((c, i) => `${i + 1}. ${c.name}`).join('\n');
-    const selection = prompt(`Enter collection number to save this request to:\n\n${colNames}`);
-    
-    if (selection) {
-      const idx = parseInt(selection) - 1;
-      const targetCol = collections[idx];
-      if (targetCol) {
-        const reqName = prompt('Enter request name:', activeTab.name);
-        if (reqName) {
-          setCollections(prev => prev.map((col, i) => {
-            if (i === idx) {
-              return {
-                ...col,
-                requests: [
-                  ...col.requests,
-                  {
-                    id: Math.random().toString(36).substring(2, 9),
-                    name: reqName,
-                    requestState: JSON.parse(JSON.stringify(activeTab.requestState))
-                  }
-                ]
-              };
-            }
-            return col;
-          }));
-          
-          setTabs(prev => prev.map(t => t.id === activeTabId ? { ...t, name: reqName, isDirty: false } : t));
-          alert(`Saved successfully to ${targetCol.name}!`);
-        }
-      } else {
-        alert('Invalid collection number selected.');
-      }
+  // Called by SaveRequestModal once a target collection + name are chosen.
+  const handleSaveRequestToCollection = (collectionId: string, name: string) => {
+    const activeTab = tabs.find(t => t.id === activeTabId);
+    if (!activeTab) return;
+    setCollections(prev => prev.map(col => {
+      if (col.id !== collectionId) return col;
+      return {
+        ...col,
+        requests: [
+          ...col.requests,
+          {
+            id: Math.random().toString(36).substring(2, 9),
+            name,
+            emoji: activeTab.emoji,
+            notes: activeTab.notes,
+            requestState: JSON.parse(JSON.stringify(activeTab.requestState))
+          }
+        ]
+      };
+    }));
+    setTabs(prev => prev.map(t => t.id === activeTabId ? { ...t, name, isDirty: false } : t));
+    setIsSaveModalOpen(false);
+  };
+
+  // ── Export / Import collections as JSON ──────────────────────
+  const handleExportCollections = () => {
+    const data = JSON.stringify({ type: 'izlude-collections', version: 1, exportedAt: new Date().toISOString(), collections }, null, 2);
+    const blob = new Blob([data], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `izlude-collections-${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleImportCollections = async (file: File) => {
+    try {
+      const text = await file.text();
+      const parsed = JSON.parse(text);
+      const incoming: Collection[] = Array.isArray(parsed) ? parsed : parsed.collections;
+      if (!Array.isArray(incoming)) throw new Error('File does not contain a collections array.');
+      // Regenerate IDs to avoid collisions with existing collections.
+      const withNewIds: Collection[] = incoming.map(c => ({
+        id: Math.random().toString(36).substring(2, 9),
+        name: c.name || 'Imported',
+        emoji: c.emoji,
+        requests: (c.requests || []).map((r: any) => ({
+          id: Math.random().toString(36).substring(2, 9),
+          name: r.name || 'Request',
+          emoji: r.emoji,
+          notes: r.notes,
+          requestState: r.requestState || JSON.parse(JSON.stringify(DEFAULT_REQUEST_STATE))
+        }))
+      }));
+      setCollections(prev => [...prev, ...withNewIds]);
+    } catch (err: any) {
+      await dialog.confirm({
+        title: 'Import failed',
+        message: err?.message || 'The file could not be read as a collections export.',
+        confirmLabel: 'OK',
+        cancelLabel: 'OK',
+      });
     }
   };
 
@@ -518,237 +649,160 @@ export default function App() {
         <header className="landing-header">
           <div className="landing-logo-container">
             <img src="/favicon.svg" className="landing-logo" alt="Izlude logo" />
-            <span className="landing-logo-text">Izlude</span>
+            <span className="landing-logo-text">izlude</span>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-            <button 
+          <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+            <button
               onClick={handleToggleTheme}
               className="outline"
-              style={{
-                padding: '8px',
-                borderRadius: '4px'
-              }}
+              title="Toggle theme"
+              style={{ padding: '7px', borderRadius: '3px' }}
             >
-              {theme === 'dark' ? <Sun size={15} /> : <Moon size={15} />}
+              {theme === 'dark' ? <Sun size={14} /> : <Moon size={14} />}
             </button>
-            <button 
+            <button
               onClick={() => setCurrentView('app')}
               className="primary"
               style={{
-                padding: '8px 16px',
-                fontSize: '13px',
-                fontWeight: '500'
+                fontFamily: 'var(--font-mono)',
+                padding: '7px 14px',
+                fontSize: '12px',
+                fontWeight: 600,
+                letterSpacing: '0.04em',
+                borderRadius: '3px'
               }}
             >
-              Launch Client
+              Open client
             </button>
           </div>
         </header>
 
-        {/* Hero Section */}
+        {/* Hero */}
         <main className="landing-hero">
-          <span className="landing-badge">
-            v0.0.1 Beta Release
-          </span>
+          <span className="landing-kicker">API client · instrument build</span>
 
           <h1 className="landing-title">
-            The Native, Ultra-Lightweight API Client
+            An API client<br />built like a<br />measuring instrument.
           </h1>
 
           <p className="landing-desc">
-            Ditch the memory-heavy Electron clients. Izlude compiles down to a native 5MB bundle, using native OS WebViews and a fast Rust backend to bypass browser CORS limitations natively. Styled cleanly in a signature monochrome aesthetic.
+            Izlude sends requests, shows the response, and otherwise stays out of the way.
+            Native binary, Rust core, no CORS friction.
           </p>
 
-          {/* CTA Group */}
+          {/* CTA */}
           <div className="landing-cta-group">
-            <button 
+            <button
               onClick={() => setCurrentView('app')}
               className="primary"
-              style={{ padding: '12px 28px', fontSize: '15px', fontWeight: '500', borderRadius: '6px' }}
+              style={{
+                fontFamily: 'var(--font-mono)',
+                padding: '11px 22px',
+                fontSize: '13px',
+                fontWeight: 600,
+                letterSpacing: '0.04em',
+                borderRadius: '3px'
+              }}
             >
-              Launch Web Client
+              ▸ Open client
             </button>
-            <a 
-              href="https://github.com/nanpipat/Izlude/releases/download/v0.0.1/Izlude_0.1.0_aarch64.dmg"
-              className="outline"
-              style={{
-                textDecoration: 'none',
-                padding: '12px 24px',
-                fontSize: '14px',
-                fontWeight: '500',
-                borderRadius: '6px',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '8px'
-              }}
-            >
-              <Laptop size={16} /> Download macOS (.dmg)
-            </a>
-            <a 
+            <a
               href="https://github.com/nanpipat/Izlude/releases"
-              className="outline"
               style={{
+                fontFamily: 'var(--font-mono)',
                 textDecoration: 'none',
-                padding: '12px 24px',
-                fontSize: '14px',
-                fontWeight: '500',
-                borderRadius: '6px',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '8px'
+                fontSize: '12px',
+                color: 'var(--text-secondary)',
+                borderBottom: '1px solid var(--border-color)',
+                padding: '2px 0'
               }}
             >
-              <Terminal size={16} /> Download Windows (.exe)
+              downloads / releases ↗
             </a>
           </div>
 
-          {/* Vector GUI App Mockup */}
-          <div className="landing-mockup-wrapper">
-            <svg viewBox="0 0 800 500" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
-              {/* Header block */}
-              <rect x="0" y="0" width="800" height="40" fill={theme === 'dark' ? '#202020' : '#f7f7f5'} />
-              <circle cx="20" cy="20" r="5" fill="#ff5f56" />
-              <circle cx="36" cy="20" r="5" fill="#ffbd2e" />
-              <circle cx="52" cy="20" r="5" fill="#27c93f" />
-              <text x="400" y="25" fill={theme === 'dark' ? '#909090' : '#7a7a78'} font-family="monospace" font-size="12" text-anchor="middle">Izlude - API Client</text>
-              <line x1="0" y1="40" x2="800" y2="40" stroke={theme === 'dark' ? '#303030' : '#e9e9e6'} stroke-width="1" />
-
-              {/* Sidebar */}
-              <rect x="0" y="40" width="200" height="460" fill={theme === 'dark' ? '#191919' : '#ffffff'} />
-              <line x1="200" y1="40" x2="200" y2="500" stroke={theme === 'dark' ? '#303030' : '#e9e9e6'} stroke-width="1" />
-              
-              {/* Sidebar items */}
-              <rect x="15" y="60" width="170" height="24" rx="4" fill={theme === 'dark' ? '#2d2d2d' : '#efefe9'} />
-              <text x="25" y="76" font-family="sans-serif" font-weight="bold" font-size="12" fill={theme === 'dark' ? '#ffffff' : '#37352f'}>collections</text>
-              <text x="35" y="112" font-family="sans-serif" font-size="12" fill={theme === 'dark' ? '#ffffff' : '#37352f'}>📁 User Auth API</text>
-              <text x="35" y="138" font-family="sans-serif" font-size="12" fill={theme === 'dark' ? '#ffffff' : '#37352f'}>📁 Payments Gateway</text>
-              
-              <text x="25" y="180" font-family="sans-serif" font-weight="bold" font-size="11" fill={theme === 'dark' ? '#909090' : '#7a7a78'}>HISTORY</text>
-              <rect x="25" y="196" width="30" height="15" rx="3" fill="#2ea843" />
-              <text x="40" y="207" font-family="sans-serif" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle">POST</text>
-              <text x="62" y="207" font-family="sans-serif" font-size="11" fill={theme === 'dark' ? '#ffffff' : '#37352f'}>/api/v1/auth/login</text>
-
-              <rect x="25" y="222" width="30" height="15" rx="3" fill="#2ea843" />
-              <text x="40" y="233" font-family="sans-serif" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle">GET</text>
-              <text x="62" y="233" font-family="sans-serif" font-size="11" fill={theme === 'dark' ? '#ffffff' : '#37352f'}>/users/me</text>
-
-              {/* Main Client workspace */}
-              <rect x="200" y="40" width="600" height="460" fill={theme === 'dark' ? '#191919' : '#ffffff'} />
-              
-              {/* Method select / URL bar */}
-              <rect x="220" y="65" width="70" height="30" rx="4" fill={theme === 'dark' ? '#202020' : '#f7f7f5'} stroke={theme === 'dark' ? '#303030' : '#e9e9e6'} />
-              <text x="255" y="84" font-family="sans-serif" font-weight="bold" font-size="12" fill="#2ea843" text-anchor="middle">POST</text>
-              
-              <rect x="298" y="65" width="410" height="30" rx="4" fill={theme === 'dark' ? '#202020' : '#f7f7f5'} stroke={theme === 'dark' ? '#303030' : '#e9e9e6'} />
-              <text x="312" y="84" font-family="monospace" font-size="12" fill={theme === 'dark' ? '#ffffff' : '#37352f'}>https://api.izlude.dev/v1/auth/login</text>
-              
-              <rect x="716" y="65" width="62" height="30" rx="4" fill={theme === 'dark' ? '#ffffff' : '#37352f'} />
-              <text x="747" y="84" font-family="sans-serif" font-size="12" font-weight="bold" fill={theme === 'dark' ? '#191919' : '#ffffff'} text-anchor="middle">Send</text>
-
-              {/* Tabs list */}
-              <text x="220" y="130" font-family="sans-serif" font-weight="bold" font-size="12" fill={theme === 'dark' ? '#ffffff' : '#37352f'}>Params</text>
-              <text x="280" y="130" font-family="sans-serif" font-size="12" fill={theme === 'dark' ? '#909090' : '#7a7a78'}>Headers</text>
-              <text x="350" y="130" font-family="sans-serif" font-size="12" fill={theme === 'dark' ? '#909090' : '#7a7a78'}>Body (JSON)</text>
-              <line x1="220" y1="138" x2="260" y2="138" stroke={theme === 'dark' ? '#ffffff' : '#37352f'} stroke-width="2" />
-              <line x1="220" y1="140" x2="780" y2="140" stroke={theme === 'dark' ? '#303030' : '#e9e9e6'} stroke-width="1" />
-
-              {/* Grid block */}
-              <rect x="220" y="155" width="560" height="24" fill={theme === 'dark' ? '#202020' : '#f7f7f5'} />
-              <text x="230" y="171" font-family="sans-serif" font-size="11" font-weight="bold" fill={theme === 'dark' ? '#909090' : '#7a7a78'}>Key</text>
-              <text x="400" y="171" font-family="sans-serif" font-size="11" font-weight="bold" fill={theme === 'dark' ? '#909090' : '#7a7a78'}>Value</text>
-              <text x="580" y="171" font-family="sans-serif" font-size="11" font-weight="bold" fill={theme === 'dark' ? '#909090' : '#7a7a78'}>Description</text>
-              
-              <line x1="220" y1="205" x2="780" y2="205" stroke={theme === 'dark' ? '#303030' : '#e9e9e6'} stroke-width="1" />
-              <text x="230" y="196" font-family="monospace" font-size="12" fill={theme === 'dark' ? '#ffffff' : '#37352f'}>grant_type</text>
-              <text x="400" y="196" font-family="monospace" font-size="12" fill="#0f7b2c">"password"</text>
-              
-              {/* Response block divider */}
-              <line x1="200" y1="230" x2="800" y2="230" stroke={theme === 'dark' ? '#303030' : '#e9e9e6'} stroke-width="2" />
-              
-              {/* Response Panel */}
-              <rect x="200" y="232" width="600" height="268" fill={theme === 'dark' ? '#202020' : '#f7f7f5'} />
-              
-              <text x="220" y="260" font-family="sans-serif" font-weight="bold" font-size="12" fill={theme === 'dark' ? '#909090' : '#7a7a78'}>Response</text>
-              <rect x="715" y="248" width="62" height="18" rx="3" fill="#e2f5e6" />
-              <text x="746" y="261" font-family="sans-serif" font-size="10" font-weight="bold" fill="#2ea843" text-anchor="middle">200 OK</text>
-              <line x1="200" y1="275" x2="800" y2="275" stroke={theme === 'dark' ? '#303030' : '#e9e9e6'} stroke-width="1" />
-
-              {/* CodeMirror Mock Editor in Response Panel */}
-              <rect x="220" y="290" width="560" height="190" rx="4" fill={theme === 'dark' ? '#191919' : '#ffffff'} stroke={theme === 'dark' ? '#303030' : '#e9e9e6'} />
-              
-              {/* Line numbers */}
-              <rect x="220" y="290" width="30" height="190" fill={theme === 'dark' ? '#202020' : '#f7f7f5'} />
-              <line x1="250" y1="290" x2="250" y2="480" stroke={theme === 'dark' ? '#303030' : '#e9e9e6'} stroke-width="1" />
-              <text x="238" y="312" font-family="monospace" font-size="11" fill={theme === 'dark' ? '#909090' : '#7a7a78'} text-anchor="end">1</text>
-              <text x="238" y="332" font-family="monospace" font-size="11" fill={theme === 'dark' ? '#909090' : '#7a7a78'} text-anchor="end">2</text>
-              <text x="238" y="352" font-family="monospace" font-size="11" fill={theme === 'dark' ? '#909090' : '#7a7a78'} text-anchor="end">3</text>
-              <text x="238" y="372" font-family="monospace" font-size="11" fill={theme === 'dark' ? '#909090' : '#7a7a78'} text-anchor="end">4</text>
-              
-              {/* Highlighted JSON content */}
-              <text x="262" y="312" font-family="monospace" font-size="12" fill={theme === 'dark' ? '#ffffff' : '#37352f'} font-weight="bold">{"{"}</text>
-              <text x="282" y="332" font-family="monospace" font-size="12" fill="#e06c75" font-weight="bold">"status"</text>
-              <text x="350" y="332" font-family="monospace" font-size="12" fill={theme === 'dark' ? '#ffffff' : '#37352f'}>:</text>
-              <text x="362" y="332" font-family="monospace" font-size="12" fill="#98c379">"success"</text>
-              <text x="430" y="332" font-family="monospace" font-size="12" fill={theme === 'dark' ? '#ffffff' : '#37352f'}>,</text>
-
-              <text x="282" y="352" font-family="monospace" font-size="12" fill="#e06c75" font-weight="bold">"access_token"</text>
-              <text x="400" y="352" font-family="monospace" font-size="12" fill={theme === 'dark' ? '#ffffff' : '#37352f'}>:</text>
-              <text x="412" y="352" font-family="monospace" font-size="12" fill="#98c379">"eyJhbGciOiJIUzI1NiIsIn..."</text>
-              <text x="600" y="352" font-family="monospace" font-size="12" fill={theme === 'dark' ? '#ffffff' : '#37352f'}>,</text>
-
-              <text x="282" y="372" font-family="monospace" font-size="12" fill="#e06c75" font-weight="bold">"expires_in"</text>
-              <text x="380" y="372" font-family="monospace" font-size="12" fill={theme === 'dark' ? '#ffffff' : '#37352f'}>:</text>
-              <text x="392" y="372" font-family="monospace" font-size="12" fill="#d19a66">3600</text>
-              
-              <text x="262" y="392" font-family="monospace" font-size="12" fill={theme === 'dark' ? '#ffffff' : '#37352f'} font-weight="bold">{"}"}</text>
-            </svg>
+          {/* Instrument strip — the one signature graphic */}
+          <div className="landing-strip">
+            <div className="landing-strip-cell">
+              <span className="method-badge post">POST</span>
+            </div>
+            <div className="landing-strip-cell grow">
+              <span>api.izlude.dev/v1/auth/login</span>
+            </div>
+            <div className="landing-strip-cell">
+              <span className="strip-arrow">▸</span>
+              <span style={{ color: 'var(--method-get)', fontWeight: 600 }}>200</span>
+              <span style={{ color: 'var(--text-secondary)' }}>OK</span>
+            </div>
+            <div className="landing-strip-cell">
+              <span className="strip-label">time</span>
+              <span style={{ color: 'var(--text-primary)' }}>2.4ms</span>
+            </div>
+            <div className="landing-strip-cell">
+              <span className="strip-label">size</span>
+              <span style={{ color: 'var(--text-primary)' }}>184B</span>
+            </div>
           </div>
 
-          {/* Key Value Grid Cards */}
-          <div className="landing-grid-features">
-            <div className="landing-feature-card">
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
-                <Sparkles size={16} style={{ color: 'var(--color-success)' }} />
-                <h3 style={{ fontSize: '15px', fontWeight: '700' }}>Direct CORS Bypassing</h3>
-              </div>
-              <p style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: '1.5' }}>
-                Tauri executes requests natively in Rust. Skip local proxy setups or browser extensions; bypass CORS constraints automatically.
-              </p>
+          {/* Spec sheet — replaces the feature-card grid */}
+          <div className="landing-spec">
+            <div className="landing-spec-row">
+              <span className="landing-spec-key">Footprint</span>
+              <span className="landing-spec-val">
+                About <span className="mono">5MB</span> native binary — Tauri v2 + the OS WebView. No Electron, no bundled Chromium.
+              </span>
             </div>
-
-            <div className="landing-feature-card">
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
-                <Terminal size={16} style={{ color: 'var(--color-info)' }} />
-                <h3 style={{ fontSize: '15px', fontWeight: '700' }}>CodeMirror 6 Editor</h3>
-              </div>
-              <p style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: '1.5' }}>
-                Full bracket closing, JSON code folding, syntax check underlines, and responsive line numbering directly in request and response panels.
-              </p>
+            <div className="landing-spec-row">
+              <span className="landing-spec-key">Engine</span>
+              <span className="landing-spec-val">
+                Requests run in Rust through <span className="mono">@tauri-apps/plugin-http</span>, so browser CORS rules don't apply.
+              </span>
             </div>
-
-            <div className="landing-feature-card">
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
-                <Folder size={16} style={{ color: 'var(--color-warning)' }} />
-                <h3 style={{ fontSize: '15px', fontWeight: '700' }}>Direct cURL Pastes</h3>
-              </div>
-              <p style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: '1.5' }}>
-                Paste cURL commands directly in the URL input bar. Automatically decomposes and populates method, headers, params, and body data.
-              </p>
+            <div className="landing-spec-row">
+              <span className="landing-spec-key">Editor</span>
+              <span className="landing-spec-val">
+                CodeMirror 6 with brace matching, folding, lint squiggles, and live line numbers in both request and response.
+              </span>
+            </div>
+            <div className="landing-spec-row">
+              <span className="landing-spec-key">Import</span>
+              <span className="landing-spec-val">
+                Paste a <span className="mono">curl</span> command straight into the URL bar — method, headers, params, and body fill in.
+              </span>
+            </div>
+            <div className="landing-spec-row">
+              <span className="landing-spec-key">Environments</span>
+              <span className="landing-spec-val">
+                Variables via <span className="mono">{`{{ }}`}</span>, with autocomplete and a resolved-value peek before you send.
+              </span>
+            </div>
+            <div className="landing-spec-row">
+              <span className="landing-spec-key">Platforms</span>
+              <span className="landing-spec-val">
+                macOS (Intel &amp; Apple Silicon) and Windows, compiled in CI. Web build for quick trials.
+              </span>
             </div>
           </div>
         </main>
 
         {/* Footer */}
         <footer style={{
-          padding: '24px',
+          padding: '20px 40px',
           borderTop: '1px solid var(--border-color)',
-          textAlign: 'center',
-          fontSize: '12px',
+          fontFamily: 'var(--font-mono)',
+          fontSize: '11px',
           color: 'var(--text-secondary)',
-          marginTop: 'auto'
+          marginTop: 'auto',
+          maxWidth: '1080px',
+          width: '100%',
+          margin: '0 auto',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center'
         }}>
-          Izlude API Client • Made with Rust & React. Released under MIT.
+          <span>izlude · rust + react</span>
+          <span>MIT</span>
         </footer>
       </div>
     );
@@ -784,13 +838,17 @@ export default function App() {
         selectedEnvId={selectedEnvId}
         onSelectEnvironment={setSelectedEnvId}
         onOpenEnvironmentModal={() => setIsEnvModalOpen(true)}
+        onOpenSettings={() => setIsSettingsOpen(true)}
         onSelectRequest={handleSelectRequest}
         onCreateCollection={handleCreateCollection}
-        onCreateRequestInCollection={handleCreateRequestInCollection}
+        onCreateRequestInCollection={handleCreateRequestPrompt}
+        onDuplicateRequest={handleDuplicateRequest}
         onDeleteCollection={handleDeleteCollection}
         onDeleteRequestInCollection={handleDeleteRequestInCollection}
         onClearHistory={() => setHistory([])}
         onDeleteHistoryItem={(id) => setHistory(prev => prev.filter(h => h.id !== id))}
+        onExportCollections={handleExportCollections}
+        onImportCollections={handleImportCollections}
         theme={theme}
         onToggleTheme={handleToggleTheme}
         onBackToLanding={() => setCurrentView('landing')}
@@ -821,6 +879,10 @@ export default function App() {
                 key={tab.id}
                 onClick={() => setActiveTabId(tab.id)}
                 onDoubleClick={() => handleRenameTab(tab.id)}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  setTabCtxMenu({ x: e.clientX, y: e.clientY, tabId: tab.id });
+                }}
                 onAuxClick={(e) => {
                   if (e.button === 1) {
                     e.preventDefault();
@@ -828,31 +890,33 @@ export default function App() {
                   }
                 }}
                 className={`workspace-tab hover-row ${isActive ? 'active' : ''}`}
+                title={`${tab.name} — ${tab.requestState.method} ${tab.requestState.url || ''}\nDouble-click to rename · Right-click for menu`}
               >
-                <span 
+                <span
                   onClick={(e) => {
                     e.stopPropagation();
                     setOpenEmojiTabId(tab.id);
                     setEmojiCoords({ top: e.clientY + 12, left: e.clientX - 60 });
-                  }} 
+                  }}
                   style={{ cursor: 'pointer', fontSize: '13px', marginRight: '2px' }}
-                  title="Change Emoji"
+                  title="Change emoji"
+                  aria-label={`Change emoji for ${tab.name}`}
                 >
                   {tab.emoji || '📄'}
                 </span>
                 <span className={`method-badge ${tab.requestState.method.toLowerCase()}`} style={{ scale: '0.8', margin: '0 -4px' }}>
                   {tab.requestState.method}
                 </span>
-                <span style={{ 
-                  overflow: 'hidden', 
-                  textOverflow: 'ellipsis', 
+                <span style={{
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
                   whiteSpace: 'nowrap',
                   flex: 1
                 }}>
                   {tab.name}
                   {tab.isDirty && ' *'}
                 </span>
-                <button 
+                <button
                   onClick={(e) => handleCloseTab(tab.id, e)}
                   style={{
                     padding: '2px',
@@ -861,7 +925,9 @@ export default function App() {
                     alignItems: 'center',
                     justifyContent: 'center'
                   }}
-                  className="hover-actions notion-icon-btn"
+                  className={`icon-btn ${isActive ? '' : 'hover-actions'}`}
+                  aria-label={`Close ${tab.name}`}
+                  title="Close tab"
                 >
                   <X size={10} />
                 </button>
@@ -914,6 +980,7 @@ export default function App() {
               response={activeTab.responseState}
               requestState={activeTab.requestState}
               isLoading={activeTab.isLoading}
+              renderHtmlScripts={settings.renderHtmlScripts}
             />
           </div>
         ) : (
@@ -931,8 +998,23 @@ export default function App() {
         onSaveEnvironments={setEnvironments}
       />
 
+      <SaveRequestModal
+        isOpen={isSaveModalOpen}
+        collections={collections}
+        defaultName={activeTab?.name || 'Untitled Request'}
+        onClose={() => setIsSaveModalOpen(false)}
+        onSave={handleSaveRequestToCollection}
+      />
+
+      <SettingsModal
+        isOpen={isSettingsOpen}
+        settings={settings}
+        onClose={() => setIsSettingsOpen(false)}
+        onSave={setSettings}
+      />
+
       {/* 5. Custom Overlay modals (Features 2, 11, 12) */}
-      <CommandPalette 
+      <CommandPalette
         show={showCommandPalette}
         onClose={() => setShowCommandPalette(false)}
         activeTab={activeTab}
@@ -941,33 +1023,34 @@ export default function App() {
         onSaveToCollection={handleSaveToCollection}
         onToggleTheme={handleToggleTheme}
         onOpenEnvModal={() => setIsEnvModalOpen(true)}
+        onOpenSettings={() => setIsSettingsOpen(true)}
         onClearHistory={() => setHistory([])}
         onBackToLanding={() => setCurrentView('landing')}
       />
 
       {showShortcutsModal && (
-        <div className="notion-modal-overlay" onClick={() => setShowShortcutsModal(false)}>
-          <div className="notion-modal" style={{ width: '450px' }} onClick={e => e.stopPropagation()}>
-            <div className="notion-modal-header">
+        <div className="app-modal-overlay" onClick={() => setShowShortcutsModal(false)}>
+          <div className="app-modal" style={{ width: '450px' }} onClick={e => e.stopPropagation()}>
+            <div className="app-modal-header">
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <HelpCircle size={18} />
                 <h3 style={{ fontSize: '15px', fontWeight: '600' }}>Keyboard Shortcuts</h3>
               </div>
               <button onClick={() => setShowShortcutsModal(false)} style={{ fontSize: '18px' }}>×</button>
             </div>
-            <div className="notion-modal-body" style={{ padding: '16px 20px' }}>
+            <div className="app-modal-body" style={{ padding: '16px 20px' }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '13px' }}>
                   <span style={{ color: 'var(--text-secondary)' }}>Send Request</span>
-                  <kbd className="notion-command-palette-shortcut">⌘ + Enter</kbd>
+                  <kbd className="command-palette-shortcut">⌘ + Enter</kbd>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '13px' }}>
                   <span style={{ color: 'var(--text-secondary)' }}>Open Command Palette</span>
-                  <kbd className="notion-command-palette-shortcut">⌘ + K</kbd>
+                  <kbd className="command-palette-shortcut">⌘ + K</kbd>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '13px' }}>
                   <span style={{ color: 'var(--text-secondary)' }}>Create New Tab</span>
-                  <kbd className="notion-command-palette-shortcut">⌘ + T</kbd>
+                  <kbd className="command-palette-shortcut">⌘ + T</kbd>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '13px' }}>
                   <span style={{ color: 'var(--text-secondary)' }}>Close Request Tab</span>
@@ -975,11 +1058,11 @@ export default function App() {
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '13px' }}>
                   <span style={{ color: 'var(--text-secondary)' }}>Environments Manager</span>
-                  <kbd className="notion-command-palette-shortcut">Shift + ⌘ + E</kbd>
+                  <kbd className="command-palette-shortcut">Shift + ⌘ + E</kbd>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '13px' }}>
                   <span style={{ color: 'var(--text-secondary)' }}>Toggle Shortcuts Menu</span>
-                  <kbd className="notion-command-palette-shortcut">?</kbd>
+                  <kbd className="command-palette-shortcut">?</kbd>
                 </div>
               </div>
             </div>
@@ -987,12 +1070,51 @@ export default function App() {
         </div>
       )}
 
+      {/* Tab right-click context menu */}
+      {tabCtxMenu && (
+        <div
+          className="ctx-menu"
+          style={{ position: 'fixed', top: `${tabCtxMenu.y}px`, left: `${tabCtxMenu.x}px` }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <button
+            className="ctx-menu-item"
+            onClick={() => {
+              setActiveTabId(tabCtxMenu.tabId);
+              handleRenameTab(tabCtxMenu.tabId);
+              setTabCtxMenu(null);
+            }}
+          >
+            <Pencil size={13} /> Rename
+          </button>
+          <button
+            className="ctx-menu-item"
+            onClick={() => {
+              const t = tabs.find(x => x.id === tabCtxMenu.tabId);
+              if (t) handleCreateTab(t.requestState, `${t.name} (copy)`, t.emoji, t.notes);
+              setTabCtxMenu(null);
+            }}
+          >
+            <CopyIcon size={13} /> Duplicate
+          </button>
+          <button
+            className="ctx-menu-item danger"
+            onClick={() => {
+              performCloseTab(tabCtxMenu.tabId);
+              setTabCtxMenu(null);
+            }}
+          >
+            <X size={13} /> Close
+          </button>
+        </div>
+      )}
+
       {openEmojiTabId && (
-        <div className="notion-emoji-popover" style={{ top: `${emojiCoords.top}px`, left: `${emojiCoords.left}px` }} onClick={e => e.stopPropagation()}>
+        <div className="emoji-popover" style={{ top: `${emojiCoords.top}px`, left: `${emojiCoords.left}px` }} onClick={e => e.stopPropagation()}>
           {['🔑', '💳', '📦', '👤', '⚙️', '📁', '📄', '🌐', '🚀', '🧪', '🔍', '📈', '💬', '⚠️', '✅', '❌', '⏱️', '🛠️'].map(emoji => (
             <div 
               key={emoji} 
-              className="notion-emoji-btn" 
+              className="emoji-btn" 
               onClick={() => handleSelectEmoji(openEmojiTabId, emoji)}
             >
               {emoji}
@@ -1013,6 +1135,7 @@ interface CommandPaletteProps {
   onSaveToCollection: () => void;
   onToggleTheme: () => void;
   onOpenEnvModal: () => void;
+  onOpenSettings: () => void;
   onClearHistory: () => void;
   onBackToLanding: () => void;
 }
@@ -1026,6 +1149,7 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({
   onSaveToCollection,
   onToggleTheme,
   onOpenEnvModal,
+  onOpenSettings,
   onClearHistory,
   onBackToLanding
 }) => {
@@ -1051,6 +1175,7 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({
     { label: 'Save Active Request', shortcut: '⌘S', action: () => onSaveToCollection() },
     { label: 'Switch Light/Dark Theme', shortcut: 'T', action: () => onToggleTheme() },
     { label: 'Open Environment Settings', shortcut: 'Shift+⌘+E', action: () => onOpenEnvModal() },
+    { label: 'Open Settings', shortcut: ',', action: () => onOpenSettings() },
     { label: 'Clear Request History', shortcut: 'L', action: () => onClearHistory() },
     { label: 'Back to Home Landing', shortcut: 'Esc', action: () => onBackToLanding() }
   ];
@@ -1079,9 +1204,9 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({
   if (!show) return null;
 
   return (
-    <div className="notion-command-palette-overlay" onClick={onClose}>
-      <div className="notion-command-palette" onClick={e => e.stopPropagation()} onKeyDown={handleKeyDown}>
-        <div className="notion-command-palette-input-wrapper">
+    <div className="command-palette-overlay" onClick={onClose}>
+      <div className="command-palette" onClick={e => e.stopPropagation()} onKeyDown={handleKeyDown}>
+        <div className="command-palette-input-wrapper">
           <Search size={16} style={{ color: 'var(--text-secondary)' }} />
           <input 
             ref={inputRef}
@@ -1089,10 +1214,10 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({
             placeholder="Type a command or search..." 
             value={search}
             onChange={e => { setSearch(e.target.value); setSelectedIndex(0); }}
-            className="notion-command-palette-input"
+            className="command-palette-input"
           />
         </div>
-        <div className="notion-command-palette-list">
+        <div className="command-palette-list">
           {filtered.length === 0 ? (
             <div style={{ padding: '8px 12px', fontSize: '13px', color: 'var(--text-secondary)', fontStyle: 'italic' }}>
               No commands found
@@ -1103,12 +1228,12 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({
               return (
                 <div 
                   key={c.label} 
-                  className={`notion-command-palette-item ${isSel ? 'selected' : ''}`}
+                  className={`command-palette-item ${isSel ? 'selected' : ''}`}
                   onClick={() => { c.action(); onClose(); }}
                   onMouseEnter={() => setSelectedIndex(idx)}
                 >
                   <span>{c.label}</span>
-                  <span className="notion-command-palette-shortcut">{c.shortcut}</span>
+                  <span className="command-palette-shortcut">{c.shortcut}</span>
                 </div>
               );
             })

@@ -2,7 +2,7 @@ import { EditorView } from '@codemirror/view';
 import { HighlightStyle, syntaxHighlighting } from '@codemirror/language';
 import { tags as t } from '@lezer/highlight';
 
-const notionTheme = EditorView.theme({
+const izludeTheme = EditorView.theme({
   "&": {
     color: "var(--text-primary)",
     backgroundColor: "var(--bg-primary)",
@@ -11,16 +11,17 @@ const notionTheme = EditorView.theme({
   },
   ".cm-content": {
     caretColor: "var(--text-primary)",
-    fontFamily: "Courier, monospace"
+    fontFamily: "var(--font-mono)",
+    fontFeatureSettings: "ss01, zero"
   },
   ".cm-cursor, .cm-dropCursor": { borderLeftColor: "var(--text-primary)" },
   "&.cm-focused .cm-selectionBackground, .cm-selectionBackground, ::selection": { backgroundColor: "var(--bg-hover)" },
-  ".cm-panels": { 
-    backgroundColor: "var(--bg-secondary)", 
+  ".cm-panels": {
+    backgroundColor: "var(--bg-secondary)",
     color: "var(--text-primary)",
     border: "1px solid var(--border-color)",
-    borderBottomLeftRadius: "4px",
-    borderBottomRightRadius: "4px"
+    borderBottomLeftRadius: "3px",
+    borderBottomRightRadius: "3px"
   },
   ".cm-search": {
     padding: "6px 12px",
@@ -37,7 +38,7 @@ const notionTheme = EditorView.theme({
     fontSize: "11px",
     padding: "2px 6px",
     border: "1px solid var(--border-color)",
-    borderRadius: "3px",
+    borderRadius: "2px",
     cursor: "pointer",
     backgroundColor: "var(--bg-primary)",
     color: "var(--text-primary)"
@@ -49,7 +50,7 @@ const notionTheme = EditorView.theme({
     fontSize: "12px",
     padding: "2px 6px",
     border: "1px solid var(--border-color)",
-    borderRadius: "3px",
+    borderRadius: "2px",
     backgroundColor: "var(--bg-primary)",
     color: "var(--text-primary)",
     outline: "none"
@@ -61,6 +62,7 @@ const notionTheme = EditorView.theme({
     userSelect: "none"
   },
   ".cm-lineNumbers .cm-gutterElement": {
+    fontFamily: "var(--font-mono)",
     padding: "0 8px 0 12px",
     minWidth: "40px"
   },
@@ -73,19 +75,19 @@ const notionTheme = EditorView.theme({
   }
 }, { dark: false });
 
-const notionHighlightStyle = HighlightStyle.define([
+const izludeHighlightStyle = HighlightStyle.define([
   { tag: t.keyword, color: "var(--text-primary)", fontWeight: "bold" },
-  { tag: t.propertyName, color: "var(--syntax-key)", fontWeight: "600" }, // JSON keys
-  { tag: t.string, color: "var(--syntax-string)" }, // JSON strings
-  { tag: t.number, color: "var(--syntax-number)" }, // JSON numbers
-  { tag: t.bool, color: "var(--syntax-bool)" }, // JSON booleans
-  { tag: t.null, color: "var(--syntax-null)" }, // JSON null values
+  { tag: t.propertyName, color: "var(--syntax-key)", fontWeight: "600" },
+  { tag: t.string, color: "var(--syntax-string)" },
+  { tag: t.number, color: "var(--syntax-number)" },
+  { tag: t.bool, color: "var(--syntax-bool)" },
+  { tag: t.null, color: "var(--syntax-null)" },
   { tag: t.separator, color: "var(--text-primary)" },
   { tag: t.bracket, color: "var(--text-primary)" },
   { tag: t.comment, color: "var(--text-secondary)", fontStyle: "italic" }
 ]);
 
-export const notionThemeExtension = [
-  notionTheme,
-  syntaxHighlighting(notionHighlightStyle)
+export const izludeThemeExtension = [
+  izludeTheme,
+  syntaxHighlighting(izludeHighlightStyle)
 ];

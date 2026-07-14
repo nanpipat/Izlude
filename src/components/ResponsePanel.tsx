@@ -1,21 +1,23 @@
 import React, { useState } from 'react';
-import { Copy, Check, Terminal, ExternalLink, Search } from 'lucide-react';
+import { Copy, Check, ExternalLink, Search, AlertTriangle, Radio } from 'lucide-react';
 import { type ResponseState, type RequestState } from '../types';
 import { generateCurl, generateFetch, generatePythonRequests } from '../utils/curlParser';
 import CodeMirror from '@uiw/react-codemirror';
 import { json as jsonLang } from '@codemirror/lang-json';
-import { notionThemeExtension } from '../utils/codemirrorTheme';
+import { izludeThemeExtension } from '../utils/codemirrorTheme';
 
 interface ResponsePanelProps {
   response: ResponseState | null;
   requestState: RequestState;
   isLoading: boolean;
+  renderHtmlScripts: boolean;
 }
 
 export const ResponsePanel: React.FC<ResponsePanelProps> = ({
   response,
   requestState,
-  isLoading
+  isLoading,
+  renderHtmlScripts
 }) => {
   const [activeTab, setActiveTab] = useState<'body' | 'headers' | 'code' | 'table' | 'preview'>('body');
   const [prettyFormat, setPrettyFormat] = useState<boolean>(true);
@@ -61,16 +63,16 @@ export const ResponsePanel: React.FC<ResponsePanelProps> = ({
 
   if (isLoading) {
     return (
-      <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)', flexDirection: 'column', gap: '12px' }}>
+      <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)', flexDirection: 'column', gap: '14px' }}>
         <div className="spinner" style={{
-          width: '24px',
-          height: '24px',
+          width: '22px',
+          height: '22px',
           border: '2px solid var(--border-color)',
           borderTopColor: 'var(--text-primary)',
           borderRadius: '50%',
           animation: 'spin 0.8s linear infinite'
         }}></div>
-        <span style={{ fontSize: '13px' }}>Executing Request...</span>
+        <span style={{ fontFamily: 'var(--font-mono)', fontSize: '12px', letterSpacing: '0.04em' }}>sending…</span>
         <style>{`
           @keyframes spin {
             to { transform: rotate(360deg); }
@@ -87,18 +89,18 @@ export const ResponsePanel: React.FC<ResponsePanelProps> = ({
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          width: '56px',
-          height: '56px',
-          borderRadius: '50%',
+          width: '52px',
+          height: '52px',
+          borderRadius: '4px',
           backgroundColor: 'var(--bg-secondary)',
-          marginBottom: '8px',
+          marginBottom: '6px',
           border: '1px solid var(--border-color)'
         }}>
-          <Terminal size={22} strokeWidth={1.5} style={{ color: 'var(--text-secondary)' }} />
+          <Radio size={20} strokeWidth={1.5} style={{ color: 'var(--text-secondary)' }} />
         </div>
-        <h3 style={{ fontSize: '15px', fontWeight: '600', color: 'var(--text-primary)' }}>Awaiting Request Send</h3>
+        <h3 style={{ fontFamily: 'var(--font-mono)', fontSize: '13px', fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-primary)' }}>Idle</h3>
         <p style={{ fontSize: '12.5px', opacity: 0.8, maxWidth: '280px', lineHeight: '1.5' }}>
-          Configure your method, endpoint, parameters, and headers above, then click Send to execute.
+          Set the method, URL, parameters, and headers above — then press Send.
         </p>
       </div>
     );
@@ -224,7 +226,7 @@ export const ResponsePanel: React.FC<ResponsePanelProps> = ({
     
     if (keys.length === 0) {
       return (
-        <table className="notion-table">
+        <table className="kv-table">
           <thead>
             <tr>
               <th>Index</th>
@@ -245,7 +247,7 @@ export const ResponsePanel: React.FC<ResponsePanelProps> = ({
 
     return (
       <div style={{ overflowX: 'auto' }}>
-        <table className="notion-table">
+        <table className="kv-table">
           <thead>
             <tr>
               <th style={{ width: '40px' }}>#</th>
@@ -286,25 +288,25 @@ export const ResponsePanel: React.FC<ResponsePanelProps> = ({
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       {/* Response Header Status Panel */}
-      <div style={{ 
-        display: 'flex', 
-        alignItems: 'center', 
-        justifyContent: 'space-between', 
-        padding: '12px 24px', 
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        padding: '10px 24px',
         borderBottom: '1px solid var(--border-color)',
         backgroundColor: 'var(--bg-secondary)'
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-          <span style={{ fontSize: '13px', fontWeight: '500', color: 'var(--text-secondary)' }}>Response</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', fontWeight: 600, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--text-secondary)' }}>Response</span>
           <span className={`status-badge ${statusClass}`}>
             {status} {statusText}
           </span>
         </div>
 
         {status > 0 && (
-          <div style={{ display: 'flex', gap: '16px', fontSize: '13px', color: 'var(--text-secondary)' }}>
-            <div>Time: <span style={{ color: 'var(--text-primary)', fontWeight: '500' }}>{timeMs} ms</span></div>
-            <div>Size: <span style={{ color: 'var(--text-primary)', fontWeight: '500' }}>{formatSize(size)}</span></div>
+          <div style={{ display: 'flex', gap: '18px', fontFamily: 'var(--font-mono)', fontSize: '12px', color: 'var(--text-secondary)' }}>
+            <div><span style={{ fontSize: '9.5px', letterSpacing: '0.1em', textTransform: 'uppercase' }}>time </span><span style={{ color: 'var(--text-primary)', fontWeight: 500 }}>{timeMs}ms</span></div>
+            <div><span style={{ fontSize: '9.5px', letterSpacing: '0.1em', textTransform: 'uppercase' }}>size </span><span style={{ color: 'var(--text-primary)', fontWeight: 500 }}>{formatSize(size)}</span></div>
           </div>
         )}
       </div>
@@ -312,9 +314,9 @@ export const ResponsePanel: React.FC<ResponsePanelProps> = ({
       {/* HTTP Status Code Explainer Card (Feature 3) */}
       {status > 0 && getStatusExplainer(status) && (
         <div style={{ padding: '0 24px' }}>
-          <div className="notion-callout danger" style={{ marginTop: '12px', marginBottom: '0px' }}>
-            <div className="notion-callout-icon">⚠️</div>
-            <div className="notion-callout-content">
+          <div className="callout danger" style={{ marginTop: '12px', marginBottom: '0px' }}>
+            <div className="callout-icon"><AlertTriangle size={15} style={{ color: 'var(--color-danger)' }} /></div>
+            <div className="callout-content">
               <strong>Status {status}:</strong> {getStatusExplainer(status)}
             </div>
           </div>
@@ -322,9 +324,9 @@ export const ResponsePanel: React.FC<ResponsePanelProps> = ({
       )}
       {status === 0 && (
         <div style={{ padding: '0 24px' }}>
-          <div className="notion-callout danger" style={{ marginTop: '12px', marginBottom: '0px' }}>
-            <div className="notion-callout-icon">⚠️</div>
-            <div className="notion-callout-content">
+          <div className="callout danger" style={{ marginTop: '12px', marginBottom: '0px' }}>
+            <div className="callout-icon"><AlertTriangle size={15} style={{ color: 'var(--color-danger)' }} /></div>
+            <div className="callout-content">
               <strong>Connection Error:</strong> {statusExplainer[0]}
             </div>
           </div>
@@ -338,12 +340,14 @@ export const ResponsePanel: React.FC<ResponsePanelProps> = ({
             <button
               onClick={() => setActiveTab('body')}
               style={{
-                fontSize: '13px',
-                fontWeight: activeTab === 'body' ? '600' : '400',
+                fontFamily: 'var(--font-mono)',
+                fontSize: '12px',
+                fontWeight: activeTab === 'body' ? 600 : 400,
                 color: activeTab === 'body' ? 'var(--text-primary)' : 'var(--text-secondary)',
                 borderBottom: activeTab === 'body' ? '2px solid var(--text-primary)' : '2px solid transparent',
                 borderRadius: '0px',
-                padding: '6px 4px'
+                padding: '6px 4px',
+                textTransform: 'lowercase'
               }}
             >
               Response Body
@@ -353,12 +357,14 @@ export const ResponsePanel: React.FC<ResponsePanelProps> = ({
               <button
                 onClick={() => setActiveTab('table')}
                 style={{
-                  fontSize: '13px',
-                  fontWeight: activeTab === 'table' ? '600' : '400',
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: '12px',
+                  fontWeight: activeTab === 'table' ? 600 : 400,
                   color: activeTab === 'table' ? 'var(--text-primary)' : 'var(--text-secondary)',
                   borderBottom: activeTab === 'table' ? '2px solid var(--text-primary)' : '2px solid transparent',
                   borderRadius: '0px',
-                  padding: '6px 4px'
+                  padding: '6px 4px',
+                  textTransform: 'lowercase'
                 }}
               >
                 Table View
@@ -369,12 +375,14 @@ export const ResponsePanel: React.FC<ResponsePanelProps> = ({
               <button
                 onClick={() => setActiveTab('preview')}
                 style={{
-                  fontSize: '13px',
-                  fontWeight: activeTab === 'preview' ? '600' : '400',
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: '12px',
+                  fontWeight: activeTab === 'preview' ? 600 : 400,
                   color: activeTab === 'preview' ? 'var(--text-primary)' : 'var(--text-secondary)',
                   borderBottom: activeTab === 'preview' ? '2px solid var(--text-primary)' : '2px solid transparent',
                   borderRadius: '0px',
-                  padding: '6px 4px'
+                  padding: '6px 4px',
+                  textTransform: 'lowercase'
                 }}
               >
                 HTML Preview
@@ -384,12 +392,14 @@ export const ResponsePanel: React.FC<ResponsePanelProps> = ({
             <button
               onClick={() => setActiveTab('headers')}
               style={{
-                fontSize: '13px',
-                fontWeight: activeTab === 'headers' ? '600' : '400',
+                fontFamily: 'var(--font-mono)',
+                fontSize: '12px',
+                fontWeight: activeTab === 'headers' ? 600 : 400,
                 color: activeTab === 'headers' ? 'var(--text-primary)' : 'var(--text-secondary)',
                 borderBottom: activeTab === 'headers' ? '2px solid var(--text-primary)' : '2px solid transparent',
                 borderRadius: '0px',
-                padding: '6px 4px'
+                padding: '6px 4px',
+                textTransform: 'lowercase'
               }}
             >
               Headers ({Object.keys(headers).length})
@@ -397,12 +407,14 @@ export const ResponsePanel: React.FC<ResponsePanelProps> = ({
             <button
               onClick={() => setActiveTab('code')}
               style={{
-                fontSize: '13px',
-                fontWeight: activeTab === 'code' ? '600' : '400',
+                fontFamily: 'var(--font-mono)',
+                fontSize: '12px',
+                fontWeight: activeTab === 'code' ? 600 : 400,
                 color: activeTab === 'code' ? 'var(--text-primary)' : 'var(--text-secondary)',
                 borderBottom: activeTab === 'code' ? '2px solid var(--text-primary)' : '2px solid transparent',
                 borderRadius: '0px',
-                padding: '6px 4px'
+                padding: '6px 4px',
+                textTransform: 'lowercase'
               }}
             >
               Code Snippet
@@ -510,7 +522,7 @@ export const ResponsePanel: React.FC<ResponsePanelProps> = ({
                     style={{ flex: 1 }}
                     extensions={[
                       jsonLang(),
-                      notionThemeExtension
+                      izludeThemeExtension
                     ]}
                   />
                 </div>
@@ -527,10 +539,18 @@ export const ResponsePanel: React.FC<ResponsePanelProps> = ({
           )}
 
           {activeTab === 'preview' && isHtmlResponse && (
-            <div style={{ border: '1px solid var(--border-color)', borderRadius: '4px', overflow: 'hidden' }}>
-              <iframe 
-                srcDoc={body} 
-                sandbox="allow-scripts" 
+            <div style={{ border: '1px solid var(--border-color)', borderRadius: '4px', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+              {!renderHtmlScripts && (
+                <div className="callout warning" style={{ margin: 0, borderRadius: 0, border: 'none', borderBottom: '1px solid var(--border-color)' }}>
+                  <div className="callout-icon"><AlertTriangle size={14} style={{ color: 'var(--color-warning)' }} /></div>
+                  <div className="callout-content" style={{ fontSize: '11.5px' }}>
+                    Scripts are disabled for safety. Enable "Run scripts in HTML preview" in Settings to execute response JavaScript.
+                  </div>
+                </div>
+              )}
+              <iframe
+                srcDoc={body}
+                sandbox={renderHtmlScripts ? 'allow-scripts' : undefined}
                 style={{
                   width: '100%',
                   height: '400px',
@@ -542,7 +562,7 @@ export const ResponsePanel: React.FC<ResponsePanelProps> = ({
           )}
 
           {activeTab === 'headers' && (
-            <table className="notion-table">
+            <table className="kv-table">
               <thead>
                 <tr>
                   <th style={{ width: '200px' }}>Header Key</th>
@@ -553,7 +573,7 @@ export const ResponsePanel: React.FC<ResponsePanelProps> = ({
                 {Object.entries(headers).map(([key, val]) => (
                   <tr key={key}>
                     <td style={{ fontWeight: '500', color: 'var(--text-primary)' }}>{key}</td>
-                    <td style={{ fontFamily: 'Courier, monospace', fontSize: '12px' }}>{val}</td>
+                    <td style={{ fontFamily: 'var(--font-mono)', fontSize: '12px' }}>{val}</td>
                   </tr>
                 ))}
               </tbody>
@@ -562,7 +582,7 @@ export const ResponsePanel: React.FC<ResponsePanelProps> = ({
 
           {activeTab === 'code' && (
             <pre style={{
-              fontFamily: 'Courier, monospace',
+              fontFamily: 'var(--font-mono)',
               fontSize: '12px',
               whiteSpace: 'pre-wrap',
               padding: '12px',

@@ -25,3 +25,6 @@ dist-ssr
 
 # Tauri / Rust target builds
 src-tauri/target
+
+# zcode CLI scratch / plans
+.zcode/

@@ -1,39 +1,52 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap');
+
+/* ─────────────────────────────────────────────────────────────
+   Izlude — instrument palette
+   mono leads, sans supports. Color appears only where it means
+   something (HTTP method, response status). Chrome stays quiet.
+   ───────────────────────────────────────────────────────────── */
 
 :root {
-  --bg-primary: #ffffff;
-  --bg-secondary: #f7f7f5;
-  --bg-hover: #efefe9;
-  --bg-active: #e8e8e3;
-  --border-color: #e9e9e6;
-  --text-primary: #37352f;
-  --text-secondary: #7a7a78;
-  --accent-color: #37352f;
-  
-  /* CodeMirror Syntax Colors */
-  --syntax-key: #9a3b1a;
-  --syntax-string: #0f7b2c;
-  --syntax-number: #0b6e99;
-  --syntax-bool: #d44c1c;
-  --syntax-null: #7a7a78;
-  
-  /* Status Colors */
-  --color-success: #2ea843;
-  --color-warning: #dfab01;
-  --color-danger: #e03e3e;
-  --color-info: #0b6e99;
+  /* surfaces & ink */
+  --bg-primary:   #FAFAF7;   /* paper  — warm off-white */
+  --bg-secondary: #F2F1EB;   /* inset  — one step down */
+  --bg-hover:     #EAE8E0;
+  --bg-active:    #E2E0D6;
+  --border-color: #E2E1DB;   /* hairline */
+  --text-primary: #1B1A17;   /* ink     — warm near-black */
+  --text-secondary: #6F6D63; /* muted   */
 
-  /* Method Colors */
-  --method-get: #2ea843;
-  --method-post: #dfab01;
-  --method-put: #0b6e99;
-  --method-delete: #e03e3e;
-  --method-patch: #9b51e0;
-  --method-other: #7a7a78;
+  /* the only color the brand permits: borrowed by the Send button */
+  --accent-color: var(--text-primary);
 
-  font-family: "Inter", ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  /* CodeMirror syntax */
+  --syntax-key:    #9A3B1A;
+  --syntax-string: #0F7B2C;
+  --syntax-number: #0B6E99;
+  --syntax-bool:   #D44C1C;
+  --syntax-null:   var(--text-secondary);
+
+  /* status — semantic only */
+  --color-success: #2EA843;
+  --color-warning: #DFAB01;
+  --color-danger:  #E03E3E;
+  --color-info:    #0B6E99;
+
+  /* HTTP methods — semantic only (darkened from defaults for AA contrast on light) */
+  --method-get:    #1F7A2E;
+  --method-post:   #9A7400;
+  --method-put:    #0B6E99;
+  --method-delete: #C53030;
+  --method-patch:  #7A3FB8;
+  --method-other:  #6F6D63;
+
+  --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  --font-sans: "IBM Plex Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+
+  font-family: var(--font-sans);
   line-height: 1.5;
   font-weight: 400;
+  font-size: 14px;
 
   color-scheme: light;
   color: var(--text-primary);
@@ -45,24 +58,30 @@
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* Dark Mode Theme */
+/* Dark — tinted black, never neutral zinc */
 .dark {
-  --bg-primary: #191919;
-  --bg-secondary: #202020;
-  --bg-hover: #2d2d2d;
-  --bg-active: #353535;
-  --border-color: #303030;
-  --text-primary: #ffffff;
-  --text-secondary: #909090;
-  --accent-color: #ffffff;
-  
-  /* CodeMirror Syntax Colors */
-  --syntax-key: #e06c75;
-  --syntax-string: #98c379;
-  --syntax-number: #d19a66;
-  --syntax-bool: #56b6c2;
-  --syntax-null: #abb2bf;
-  
+  --bg-primary:   #141310;   /* void */
+  --bg-secondary: #1C1B17;
+  --bg-hover:     #262420;
+  --bg-active:    #2E2C27;
+  --border-color: #2A2823;
+  --text-primary: #E7E3D7;
+  --text-secondary: #8E8B80;
+  --accent-color: var(--text-primary);
+
+  --syntax-key:    #E06C75;
+  --syntax-string: #98C379;
+  --syntax-number: #D19A66;
+  --syntax-bool:   #56B6C2;
+  --syntax-null:   #ABB2BF;
+
+  /* methods brighten in dark for legibility */
+  --method-get:    #4CC361;
+  --method-post:   #E0B83D;
+  --method-put:    #4FA8D8;
+  --method-delete: #E85959;
+  --method-patch:  #B983E8;
+
   color-scheme: dark;
 }
 
@@ -89,17 +108,19 @@ body {
   overflow: hidden;
 }
 
-/* Notion-style Typography */
+/* Type scale — mono leads */
+.mono { font-family: var(--font-mono); font-feature-settings: "ss01", "zero"; }
+
 h1, h2, h3, h4, h5, h6 {
   font-weight: 600;
   color: var(--text-primary);
   letter-spacing: -0.01em;
 }
 
-/* Notion Buttons */
+/* ── Buttons ───────────────────────────────────────────────── */
 button {
   font-family: inherit;
-  font-size: 13px;
+  font-size: 12.5px;
   font-weight: 500;
   background: transparent;
   border: none;
@@ -110,141 +131,125 @@ button {
   justify-content: center;
   gap: 6px;
   padding: 4px 10px;
-  border-radius: 4px;
-  transition: background 0.12s ease, color 0.12s ease;
+  border-radius: 3px;
+  transition: background 0.1s ease, color 0.1s ease, border-color 0.1s ease;
   user-select: none;
 }
 
-button:hover {
-  background-color: var(--bg-hover);
-}
+button:hover { background-color: var(--bg-hover); }
+button:active { background-color: var(--bg-active); }
 
-button:active {
-  background-color: var(--bg-active);
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid var(--text-primary);
+  outline-offset: 1px;
 }
 
 button.primary {
   background-color: var(--text-primary);
   color: var(--bg-primary);
 }
+button.primary:hover { background-color: #3a3833; }
+.dark button.primary:hover { background-color: #c9c5b9; }
+button.primary:active { background-color: #0c0b09; }
 
-button.primary:hover {
-  background-color: #55534d;
+/* danger variant of primary (destructive confirms) */
+button.danger {
+  background-color: var(--color-danger);
+  color: #ffffff;
 }
-
-.dark button.primary:hover {
-  background-color: #cccccc;
-}
-
-button.primary:active {
-  background-color: #22211e;
-}
+button.danger:hover { background-color: #c83535; }
+button.danger:active { background-color: #b02e2e; }
+.dark button.danger { color: #1b1a17; }
 
 button.outline {
   border: 1px solid var(--border-color);
   background-color: var(--bg-primary);
 }
+button.outline:hover { background-color: var(--bg-hover); }
 
-button.outline:hover {
-  background-color: var(--bg-hover);
-}
-
-/* Form inputs */
+/* ── Form fields ───────────────────────────────────────────── */
 input, select, textarea {
   font-family: inherit;
-  font-size: 13px;
+  font-size: 12.5px;
   color: var(--text-primary);
   background-color: transparent;
   border: 1px solid var(--border-color);
-  border-radius: 4px;
+  border-radius: 3px;
   padding: 6px 10px;
   outline: none;
-  transition: border-color 0.12s ease, box-shadow 0.12s ease;
+  transition: border-color 0.1s ease;
 }
 
 input:focus, select:focus, textarea:focus {
   border-color: var(--text-secondary);
 }
 
-/* Custom Scrollbar (Notion Style) */
-::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
-
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-
+/* ── Scrollbar — thin, hairline ────────────────────────────── */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb {
-  background: rgba(193, 193, 192, 0.4);
-  border-radius: 3px;
+  background: var(--bg-active);
+  border-radius: 4px;
+  border: 2px solid var(--bg-primary);
 }
+::-webkit-scrollbar-thumb:hover { background: var(--text-secondary); }
 
-::-webkit-scrollbar-thumb:hover {
-  background: rgba(193, 193, 192, 0.8);
-}
-
-/* Notion Database-like Table */
-.notion-table {
+/* ── Key/value table ───────────────────────────────────────── */
+.kv-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 13px;
+  font-size: 12.5px;
   text-align: left;
 }
-
-.notion-table th {
+.kv-table th {
+  font-family: var(--font-mono);
   font-weight: 500;
   color: var(--text-secondary);
   border-bottom: 1px solid var(--border-color);
-  padding: 8px 10px;
+  padding: 6px 10px;
   background-color: var(--bg-primary);
-  font-size: 11px;
+  font-size: 10.5px;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.06em;
 }
-
-.notion-table td {
+.kv-table td {
   border-bottom: 1px solid var(--border-color);
-  padding: 3px 6px;
+  padding: 2px 6px;
   vertical-align: middle;
   height: 32px;
 }
+.kv-table tr:last-child td { border-bottom: none; }
+.kv-table tr:hover { background-color: var(--bg-secondary); }
 
-.notion-table tr:hover {
-  background-color: var(--bg-secondary);
-}
-
-.notion-table input[type="text"] {
+.kv-table input[type="text"] {
   border: 1px solid transparent;
   background-color: transparent;
   padding: 5px 8px;
   width: 100%;
-  border-radius: 3px;
+  border-radius: 2px;
   outline: none;
-  font-size: 13px;
-  transition: background-color 0.12s ease, border-color 0.12s ease, box-shadow 0.12s ease;
+  font-size: 12.5px;
+  font-family: var(--font-mono);
+  transition: background-color 0.1s ease, border-color 0.1s ease;
 }
-
-.notion-table input[type="text"]:hover:not(:focus) {
-  background-color: var(--bg-hover);
-}
-
-.notion-table input[type="text"]:focus {
+.kv-table input[type="text"]:hover:not(:focus) { background-color: var(--bg-hover); }
+.kv-table input[type="text"]:focus {
   background-color: var(--bg-primary);
   border-color: var(--text-secondary);
-  box-shadow: 0 0 0 1px var(--text-secondary);
 }
 
-/* Checkbox Style overrides */
+/* ── Checkbox ──────────────────────────────────────────────── */
 input[type="checkbox"] {
   accent-color: var(--text-primary);
   cursor: pointer;
-  width: 14px;
-  height: 14px;
+  width: 13px;
+  height: 13px;
 }
 
-/* Tabs & Layout Utilities */
+/* ── Layout shells ─────────────────────────────────────────── */
 .app-container {
   display: flex;
   width: 100%;
@@ -272,148 +277,132 @@ input[type="checkbox"] {
   background-color: var(--bg-primary);
 }
 
-/* Unified Address Bar Card */
+/* ── Address bar — the instrument strip ────────────────────── */
 .address-bar-container {
   display: flex;
   align-items: center;
   background-color: var(--bg-secondary);
   border: 1px solid var(--border-color);
-  border-radius: 6px;
-  padding: 3px 6px;
+  border-radius: 3px;
+  padding: 3px 4px 3px 10px;
   width: 100%;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  transition: border-color 0.1s ease;
 }
-
 .address-bar-container:focus-within {
   border-color: var(--text-secondary);
-  box-shadow: 0 0 0 1px var(--text-secondary);
 }
-
 .address-bar-container select {
   border: none !important;
   background: transparent !important;
+  font-family: var(--font-mono);
   font-weight: 700;
-  padding: 6px 12px;
-  font-size: 13px;
+  padding: 6px 10px;
+  font-size: 12.5px;
   outline: none !important;
   cursor: pointer;
+  letter-spacing: 0.04em;
 }
-
 .address-bar-divider {
   width: 1px;
   height: 18px;
   background-color: var(--border-color);
-  margin: 0 6px;
+  margin: 0 8px;
 }
-
 .address-bar-input {
   border: none !important;
   background: transparent !important;
   padding: 6px 8px !important;
   flex: 1;
-  font-size: 13px;
+  font-family: var(--font-mono) !important;
+  font-size: 12.5px;
   outline: none !important;
 }
+.address-bar-input:focus { box-shadow: none !important; border-color: transparent !important; }
 
-.address-bar-input:focus {
-  box-shadow: none !important;
-  border-color: transparent !important;
-}
-
-/* Badges for Request Methods */
+/* ── Method tag ────────────────────────────────────────────── */
 .method-badge {
-  font-size: 10px;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
   font-weight: 700;
   padding: 2px 6px;
-  border-radius: 3px;
+  border-radius: 2px;
   text-transform: uppercase;
   display: inline-block;
-  min-width: 45px;
+  min-width: 46px;
   text-align: center;
+  letter-spacing: 0.06em;
 }
+.method-badge.get    { background-color: rgba(46,168,67,0.12);  color: var(--method-get); }
+.method-badge.post   { background-color: rgba(223,171,1,0.14);  color: var(--method-post); }
+.method-badge.put    { background-color: rgba(11,110,153,0.12); color: var(--method-put); }
+.method-badge.delete { background-color: rgba(224,62,62,0.12);  color: var(--method-delete); }
+.method-badge.patch  { background-color: rgba(155,81,224,0.12); color: var(--method-patch); }
+.method-badge.other  { background-color: rgba(122,122,120,0.12);color: var(--method-other); }
 
-.method-badge.get { background-color: rgba(46, 168, 67, 0.1); color: var(--method-get); }
-.method-badge.post { background-color: rgba(223, 171, 1, 0.1); color: var(--method-post); }
-.method-badge.put { background-color: rgba(11, 110, 153, 0.1); color: var(--method-put); }
-.method-badge.delete { background-color: rgba(224, 62, 62, 0.1); color: var(--method-delete); }
-.method-badge.patch { background-color: rgba(155, 81, 224, 0.1); color: var(--method-patch); }
-.method-badge.other { background-color: rgba(122, 122, 120, 0.1); color: var(--method-other); }
-
-/* Status Badges */
+/* ── Status badge ──────────────────────────────────────────── */
 .status-badge {
-  font-size: 12px;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
   font-weight: 600;
-  padding: 3px 8px;
-  border-radius: 12px;
+  padding: 2px 8px;
+  border-radius: 2px;
+  letter-spacing: 0.02em;
 }
-.status-badge.success { background-color: rgba(46, 168, 67, 0.1); color: var(--color-success); }
-.status-badge.warning { background-color: rgba(223, 171, 1, 0.1); color: var(--color-warning); }
-.status-badge.danger { background-color: rgba(224, 62, 62, 0.1); color: var(--color-danger); }
+.status-badge.success { background-color: rgba(46,168,67,0.12);  color: var(--color-success); }
+.status-badge.warning { background-color: rgba(223,171,1,0.14);  color: var(--color-warning); }
+.status-badge.danger  { background-color: rgba(224,62,62,0.12);  color: var(--color-danger); }
 
-/* Notion Icons styles */
-.notion-icon {
-  width: 14px;
-  height: 14px;
-  color: var(--text-secondary);
-}
-
-.notion-icon-btn {
+/* ── Icon buttons ──────────────────────────────────────────── */
+.icon-btn {
   padding: 4px;
-  border-radius: 4px;
+  border-radius: 3px;
   color: var(--text-secondary);
   display: inline-flex;
   align-items: center;
   justify-content: center;
 }
-
-.notion-icon-btn:hover {
+.icon-btn:hover {
   color: var(--text-primary);
   background-color: var(--bg-hover);
 }
 
-/* Modals styled like Notion pages */
-.notion-modal-overlay {
+/* ── Modal ─────────────────────────────────────────────────── */
+.app-modal-overlay {
   position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background-color: rgba(15, 15, 15, 0.4);
-  backdrop-filter: blur(5px);
+  inset: 0;
+  background-color: rgba(15,15,15,0.35);
+  backdrop-filter: blur(4px);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 1000;
+  animation: overlayFade 0.12s ease;
 }
-
-.notion-modal {
+.app-modal {
   background-color: var(--bg-primary);
-  border-radius: 8px;
+  border-radius: 4px;
   width: 600px;
   max-width: 90%;
   max-height: 80vh;
-  box-shadow: 0 20px 48px rgba(15, 15, 15, 0.15);
+  box-shadow: 0 16px 48px rgba(15,15,15,0.18);
   display: flex;
   flex-direction: column;
   overflow: hidden;
   border: 1px solid var(--border-color);
 }
-
-.notion-modal-header {
-  padding: 16px 20px;
+.app-modal-header {
+  padding: 14px 20px;
   border-bottom: 1px solid var(--border-color);
   display: flex;
   align-items: center;
   justify-content: space-between;
 }
-
-.notion-modal-body {
+.app-modal-body {
   padding: 20px;
   overflow-y: auto;
   flex: 1;
 }
-
-.notion-modal-footer {
+.app-modal-footer {
   padding: 12px 20px;
   border-top: 1px solid var(--border-color);
   display: flex;
@@ -422,7 +411,34 @@ input[type="checkbox"] {
   background-color: var(--bg-secondary);
 }
 
-/* Tree Guide indentation */
+/* ── Right-click context menu ──────────────────────────────── */
+.ctx-menu {
+  z-index: 10005;
+  min-width: 140px;
+  background-color: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  box-shadow: 0 8px 24px rgba(15,15,15,0.18);
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  font-family: var(--font-mono);
+}
+.ctx-menu-item {
+  width: 100%;
+  justify-content: flex-start;
+  gap: 8px;
+  padding: 7px 10px;
+  border-radius: 2px;
+  font-size: 12px;
+  color: var(--text-primary);
+}
+.ctx-menu-item:hover { background-color: var(--bg-hover); }
+.ctx-menu-item.danger { color: var(--color-danger); }
+.ctx-menu-item.danger:hover { background-color: rgba(224,62,62,0.08); }
+
+/* ── Tree guide ────────────────────────────────────────────── */
 .tree-guideline {
   border-left: 1px solid var(--border-color);
   margin-left: 11px;
@@ -434,23 +450,19 @@ input[type="checkbox"] {
   margin-bottom: 4px;
 }
 
-/* Hover row for revealable actions */
-.hover-row {
-  position: relative;
-}
-
+/* ── Hover reveal rows ─────────────────────────────────────── */
+.hover-row { position: relative; }
 .hover-actions {
   opacity: 0;
   pointer-events: none;
-  transition: opacity 0.15s ease;
+  transition: opacity 0.12s ease;
 }
-
 .hover-row:hover .hover-actions {
   opacity: 1;
   pointer-events: auto;
 }
 
-/* Landing page premium styles */
+/* ── Landing ───────────────────────────────────────────────── */
 .landing-container {
   display: flex;
   flex-direction: column;
@@ -460,146 +472,165 @@ input[type="checkbox"] {
   color: var(--text-primary);
   overflow-y: auto;
 }
-
 .landing-header {
   padding: 20px 40px;
   display: flex;
   justify-content: space-between;
   align-items: center;
   border-bottom: 1px solid var(--border-color);
-  max-width: 1100px;
+  max-width: 1080px;
   width: 100%;
   margin: 0 auto;
 }
-
 .landing-logo-container {
   display: flex;
   align-items: center;
   gap: 10px;
 }
-
 .landing-logo {
-  width: 28px;
-  height: 28px;
-  border-radius: 6px;
+  width: 24px;
+  height: 24px;
+  border-radius: 5px;
+  display: block;
 }
-
 .landing-logo-text {
+  font-family: var(--font-mono);
   font-weight: 700;
-  font-size: 18px;
-  letter-spacing: -0.3px;
+  font-size: 16px;
+  letter-spacing: -0.02em;
 }
-
 .landing-hero {
-  max-width: 1100px;
+  max-width: 1080px;
   width: 100%;
   margin: 0 auto;
-  padding: 80px 40px 100px 40px;
+  padding: 88px 40px 64px 40px;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  text-align: center;
 }
-
-.landing-badge {
+.landing-kicker {
+  font-family: var(--font-mono);
   font-size: 11px;
-  font-weight: 600;
+  font-weight: 500;
   text-transform: uppercase;
-  letter-spacing: 1px;
+  letter-spacing: 0.18em;
   color: var(--text-secondary);
-  background-color: var(--bg-secondary);
-  padding: 5px 12px;
-  border-radius: 12px;
-  margin-bottom: 20px;
-  border: 1px solid var(--border-color);
+  margin-bottom: 28px;
 }
-
 .landing-title {
-  font-size: 48px;
-  font-weight: 800;
-  letter-spacing: -1.5px;
-  line-height: 1.15;
-  max-width: 750px;
-  margin-bottom: 16px;
+  font-family: var(--font-mono);
+  font-size: clamp(34px, 5vw, 54px);
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+  max-width: 720px;
+  margin-bottom: 22px;
 }
-
 .landing-desc {
   font-size: 16px;
   color: var(--text-secondary);
-  max-width: 650px;
+  max-width: 520px;
   line-height: 1.6;
   margin-bottom: 36px;
 }
-
 .landing-cta-group {
   display: flex;
-  gap: 16px;
+  gap: 14px;
   flex-wrap: wrap;
-  justify-content: center;
-  margin-bottom: 60px;
+  align-items: center;
+  margin-bottom: 64px;
 }
 
-.landing-mockup-wrapper {
+/* Instrument strip — the one signature graphic on the page */
+.landing-strip {
   width: 100%;
-  max-width: 850px;
-  border: 1px solid var(--border-color);
-  border-radius: 8px;
-  background-color: var(--bg-primary);
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.06);
+  max-width: 960px;
+  border-top: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border-color);
+  display: flex;
+  align-items: center;
+  gap: 0;
+  font-family: var(--font-mono);
+  font-size: 13px;
   overflow: hidden;
-  margin-bottom: 80px;
-  aspect-ratio: 1.6;
 }
+.landing-strip-cell {
+  padding: 18px 22px;
+  border-right: 1px solid var(--border-color);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  white-space: nowrap;
+}
+.landing-strip-cell:last-child { border-right: none; }
+.landing-strip-cell .strip-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--text-secondary);
+}
+.landing-strip-cell .strip-arrow {
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+.landing-strip-cell.grow { flex: 1; }
 
-.landing-grid-features {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: 24px;
+/* Spec sheet — replaces the feature-card grid */
+.landing-spec {
+  max-width: 960px;
   width: 100%;
-  max-width: 900px;
-  text-align: left;
+  margin: 0 auto;
+  padding: 0 40px 80px;
 }
-
-.landing-feature-card {
-  padding: 24px;
-  border: 1px solid var(--border-color);
-  border-radius: 8px;
-  background-color: var(--bg-secondary);
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
+.landing-spec-row {
+  display: grid;
+  grid-template-columns: 200px 1fr;
+  gap: 24px;
+  padding: 22px 0;
+  border-bottom: 1px solid var(--border-color);
+  align-items: baseline;
 }
-
-.landing-feature-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.04);
+.landing-spec-row:first-child { border-top: 1px solid var(--border-color); }
+.landing-spec-key {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--text-secondary);
 }
+.landing-spec-val {
+  font-size: 15px;
+  line-height: 1.55;
+  color: var(--text-primary);
+}
+.landing-spec-val .mono { font-family: var(--font-mono); }
 
-/* Workspace tab bar styles */
+/* ── Workspace tabs ────────────────────────────────────────── */
 .workspace-tab {
   display: flex;
   align-items: center;
   gap: 6px;
   padding: 0 10px;
   height: 32px;
-  border-radius: 4px 4px 0 0;
+  border-radius: 3px 3px 0 0;
   border: 1px solid transparent;
   background-color: transparent;
   cursor: pointer;
-  font-size: 12.5px;
+  font-family: var(--font-mono);
+  font-size: 12px;
   color: var(--text-secondary);
   margin-top: 8px;
   margin-right: 2px;
   min-width: 90px;
-  max-width: 160px;
+  max-width: 200px;
   position: relative;
   user-select: none;
-  transition: background-color 0.12s, color 0.12s, border-color 0.12s;
+  transition: background-color 0.1s, color 0.1s, border-color 0.1s;
 }
-
 .workspace-tab:hover {
   background-color: var(--bg-hover);
   color: var(--text-primary);
 }
-
 .workspace-tab.active {
   border: 1px solid var(--border-color);
   border-bottom: 1px solid var(--bg-primary);
@@ -609,59 +640,49 @@ input[type="checkbox"] {
   z-index: 2;
 }
 
-/* Command Palette Overlay */
-.notion-command-palette-overlay {
+/* ── Command palette ───────────────────────────────────────── */
+.command-palette-overlay {
   position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background-color: rgba(15, 15, 15, 0.4);
+  inset: 0;
+  background-color: rgba(15,15,15,0.35);
   backdrop-filter: blur(4px);
   display: flex;
   justify-content: center;
   padding-top: 120px;
   z-index: 10000;
+  animation: overlayFade 0.12s ease;
 }
-
-.notion-command-palette {
+.command-palette {
   background-color: var(--bg-primary);
   border: 1px solid var(--border-color);
-  border-radius: 8px;
+  border-radius: 4px;
   width: 500px;
   max-width: 90%;
-  max-height: 330px;
-  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.15);
+  max-height: 340px;
+  box-shadow: 0 16px 48px rgba(0,0,0,0.18);
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  animation: popoverFadeIn 0.15s ease;
+  animation: popoverFade 0.12s ease;
 }
-
-@keyframes popoverFadeIn {
-  from { opacity: 0; transform: translateY(-10px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-.notion-command-palette-input-wrapper {
+.command-palette-input-wrapper {
   display: flex;
   align-items: center;
   gap: 8px;
   padding: 12px 16px;
   border-bottom: 1px solid var(--border-color);
 }
-
-.notion-command-palette-input {
+.command-palette-input {
   border: none !important;
   background-color: transparent !important;
   flex: 1;
-  font-size: 14px;
+  font-family: var(--font-mono);
+  font-size: 13.5px;
   outline: none !important;
   padding: 0 !important;
   color: var(--text-primary);
 }
-
-.notion-command-palette-list {
+.command-palette-list {
   overflow-y: auto;
   flex: 1;
   padding: 6px;
@@ -669,40 +690,35 @@ input[type="checkbox"] {
   flex-direction: column;
   gap: 1px;
 }
-
-.notion-command-palette-item {
+.command-palette-item {
   padding: 8px 12px;
-  font-size: 13px;
-  border-radius: 4px;
+  font-size: 12.5px;
+  border-radius: 3px;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: space-between;
   color: var(--text-primary);
-  transition: background-color 0.1s ease;
+  transition: background-color 0.08s ease;
 }
-
-.notion-command-palette-item.selected {
-  background-color: var(--bg-active);
-}
-
-.notion-command-palette-shortcut {
+.command-palette-item.selected { background-color: var(--bg-active); }
+.command-palette-shortcut {
+  font-family: var(--font-mono);
   font-size: 10px;
   color: var(--text-secondary);
   background-color: var(--bg-secondary);
   padding: 2px 6px;
-  border-radius: 3px;
+  border-radius: 2px;
   border: 1px solid var(--border-color);
-  font-family: monospace;
 }
 
-/* Emoji Picker Popover */
-.notion-emoji-popover {
+/* ── Emoji popover ─────────────────────────────────────────── */
+.emoji-popover {
   position: absolute;
   background-color: var(--bg-primary);
   border: 1px solid var(--border-color);
-  border-radius: 6px;
-  box-shadow: 0 8px 24px rgba(15, 15, 15, 0.12);
+  border-radius: 4px;
+  box-shadow: 0 8px 24px rgba(15,15,15,0.14);
   padding: 8px;
   z-index: 10002;
   display: grid;
@@ -710,113 +726,108 @@ input[type="checkbox"] {
   gap: 4px;
   width: 190px;
 }
-
-.notion-emoji-btn {
+.emoji-btn {
   font-size: 16px;
   padding: 4px;
-  border-radius: 4px;
+  border-radius: 3px;
   cursor: pointer;
   text-align: center;
-  transition: background-color 0.1s;
+  transition: background-color 0.08s;
   display: flex;
   align-items: center;
   justify-content: center;
 }
+.emoji-btn:hover { background-color: var(--bg-hover); }
 
-.notion-emoji-btn:hover {
-  background-color: var(--bg-hover);
-}
-
-/* Callout & Note Blocks */
-.notion-callout {
+/* ── Callout / note ────────────────────────────────────────── */
+.callout {
   display: flex;
   gap: 10px;
-  padding: 12px 16px;
-  border-radius: 6px;
+  padding: 11px 14px;
+  border-radius: 3px;
   border: 1px solid var(--border-color);
-  font-size: 13px;
+  font-size: 12.5px;
   line-height: 1.5;
   margin-bottom: 12px;
 }
-
-.notion-callout.info {
+.callout.info {
   background-color: var(--bg-secondary);
-  border-left: 3px solid var(--text-secondary);
+  border-left: 2px solid var(--text-secondary);
 }
-
-.notion-callout.warning {
-  background-color: rgba(223, 171, 1, 0.05);
-  border-left: 3px solid var(--color-warning);
-  border-color: rgba(223, 171, 1, 0.15);
+.callout.warning {
+  background-color: rgba(223,171,1,0.06);
+  border-left: 2px solid var(--color-warning);
+  border-color: rgba(223,171,1,0.18);
 }
-
-.notion-callout.danger {
-  background-color: rgba(224, 62, 62, 0.05);
-  border-left: 3px solid var(--color-danger);
-  border-color: rgba(224, 62, 62, 0.15);
+.callout.danger {
+  background-color: rgba(224,62,62,0.05);
+  border-left: 2px solid var(--color-danger);
+  border-color: rgba(224,62,62,0.18);
 }
-
-.notion-callout-icon {
+.callout-icon {
   flex-shrink: 0;
   margin-top: 2px;
   display: inline-flex;
   align-items: center;
 }
+.callout-content { flex: 1; }
 
-.notion-callout-content {
-  flex: 1;
-}
-
-/* Tooltip/Variables Preview resolved bar */
+/* ── Resolved-variables peek bar ───────────────────────────── */
 .resolved-vars-bar {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
   padding: 6px 12px;
   font-size: 11px;
+  font-family: var(--font-mono);
   background-color: var(--bg-secondary);
   border: 1px solid var(--border-color);
   border-top: none;
-  border-radius: 0 0 6px 6px;
+  border-radius: 0 0 3px 3px;
   margin-top: -17px;
   margin-bottom: 8px;
   align-items: center;
 }
-
 .resolved-var-badge {
   display: inline-flex;
   align-items: center;
   gap: 4px;
   padding: 1px 6px;
-  border-radius: 4px;
+  border-radius: 2px;
   font-weight: 500;
 }
-
 .resolved-var-badge.success {
-  background-color: rgba(46, 168, 67, 0.08);
-  color: #2ea843;
-  border: 1px solid rgba(46, 168, 67, 0.15);
+  background-color: rgba(46,168,67,0.08);
+  color: var(--color-success);
+  border: 1px solid rgba(46,168,67,0.16);
 }
-
 .resolved-var-badge.danger {
-  background-color: rgba(224, 62, 62, 0.08);
-  color: #e03e3e;
-  border: 1px solid rgba(224, 62, 62, 0.15);
+  background-color: rgba(224,62,62,0.08);
+  color: var(--color-danger);
+  border: 1px solid rgba(224,62,62,0.16);
 }
 
-/* Method Accent Colors classes */
+/* ── Method-accented Send button (the brand's one color) ───── */
 button.primary.accented {
   background-color: var(--method-accent, var(--text-primary));
   color: var(--bg-primary);
 }
-
-button.primary.accented:hover {
-  opacity: 0.95;
-}
-
+button.primary.accented:hover { opacity: 0.9; }
 .address-bar-container.accented:focus-within {
   border-color: var(--method-accent, var(--text-secondary));
-  box-shadow: 0 0 0 1px var(--method-accent, var(--text-secondary));
 }
 
+/* ── Animations ────────────────────────────────────────────── */
+@keyframes overlayFade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes popoverFade {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
 
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
